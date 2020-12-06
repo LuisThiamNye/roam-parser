@@ -13,12 +13,12 @@
   (let [tree {}]
     {:blockquote (.startsWith block ">")}
     (loop [chunks []
-           text-run nil
+           run-length 0
            idx 0
            this-chunk {:styles '() :children []}
            string block]
-      (let [new-chunks (fn [] (let [last-chunk (if text-run
-                                                (update this-chunk :children conj text-run)
+      (let [new-chunks (fn [] (let [last-chunk (if (not= 0 run-length)
+                                                (update this-chunk :children conj (.substr block (- idx run-length) run-length))
                                                 this-chunk)]
                                (if (empty? (:children last-chunk))
                                  chunks
@@ -30,14 +30,14 @@
                                 (remove #{matched-style} (:styles this-chunk))
                                 (conj (:styles this-chunk) matched-style))]
               (recur (new-chunks)
-                     nil
+                     0
                      (+ idx (count (matched-style style-markers)))
                      {:styles next-styles
                       :children []}
                      (subs string (count (matched-style style-markers)))))
             ;; no change
             (recur chunks
-                   (str text-run (first string))
+                   (inc run-length)
                    (inc idx)
                    this-chunk
                    (subs string 1)))
