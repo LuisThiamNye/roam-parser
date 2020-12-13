@@ -64,26 +64,34 @@
 
 (defn parse-inline [string]
   (let [matches (.matchAll string inline-re)
-        all-tokens (apply merge (for [m matches
-                                      :let [idx (.-index m)
-                                            matched-text (first m)
-                                            group (loop [rest-groups (.entries js/Object (.-groups m))]
-                                                    (if rest-groups
-                                                      (let [[name value] (first rest-groups)]
-                                                        (if value
-                                                          name
-                                                          (recur (next rest-groups))))
-                                                      nil))
-                                            [element direction] (rest (re-find #"(.*?)([A-Z])[a-z]+$" group))
-                                            length (count matched-text)]]
-                                  {idx {:id element
-                                        :direction (case direction
-                                                     "O" :open
-                                                     "C" :close
-                                                     :dual)
-                                        :next-idx (+ idx length)
-                                        :length length
-                                        :idx idx}}))
+        all-tokens (loop [match-stack (for [m matches]
+                                        {:idx (.-index m)
+                                         :group (loop [rest-groups (.entries js/Object (.-groups m))]
+                                                  (if rest-groups
+                                                    (let [[name value] (first rest-groups)]
+                                                      (if value
+                                                        name
+                                                        (recur (next rest-groups))))
+                                                    nil))
+                                         :text (first m)})
+                          tbid (reduce #(assoc % (:id %2) [])
+                                       {} delimiters)]
+                     (if (some? match-stack)
+                       (let [m (first match-stack)
+                             [element direction] (rest (re-find #"(.*?)([A-Z])[a-z]+$" (:group m)))
+                             length (count (:text m))
+                             idx (:idx m)]
+                         (recur (next match-stack)
+                                (update tbid element
+                                        conj {:id element
+                                              :direction (case direction
+                                                           "O" :open
+                                                           "C" :close
+                                                           :dual)
+                                              :next-idx (+ idx length)
+                                              :length length
+                                              :idx idx})))
+                       tbid))
         all-tokens-by-id (reduce #(let [[k t] %2]
                                     (update % (:id t)
                                             conj {:idx k :length (:length t)}))
@@ -91,13 +99,13 @@
                                  all-tokens)
         add-opener #(conj % {:idx (:idx %2) :length (:length %2)})
         process-token (fn [id all-pending-tokens  process-layer]
-                        (loop [ts (get all-tokens-by-id id)
+                        (loop [ts (get all-pending-tokens id)
                                result []
                                openers []
                                pending-tokens all-pending-tokens]
                           (if (and (seq pending-tokens) (seq ts))
-                            (if-let [original-token (get pending-tokens (:idx (first ts)))]
-                              (let [{:keys [direction next-idx length idx]
+                            (if-let [original-token (first ts)]
+                              (let [{:keys [id direction next-idx length idx]
                                      :as current-token} original-token
                                     next-up (next ts)]
                                 (if (= :open direction)
@@ -109,10 +117,21 @@
                                     (recur  next-up
                                             (conj result {:start (+ (:idx partner) (:length partner))
                                                           :end idx
+                                                          :id id
                                                           :children (process-layer
-                                                                     (select-keys pending-tokens (for [[k v] pending-tokens :when (< (:idx partner) (:idx v) idx)] k)))})
+                                                                     (loop [x pending-tokens
+                                                                            ks (keys pending-tokens)]
+                                                                       (if (seq ks)
+                                                                         (recur (update x (first ks) (partial filter #(< (:idx partner) (:idx %) idx)) )
+                                                                                (next ks))
+                                                                         x)))})
                                             (pop openers)
-                                            (select-keys pending-tokens (for [[k v] pending-tokens :when (not (<= (:idx partner) (:idx v) idx))] k)))
+                                            (loop [x pending-tokens
+                                                   ks (keys pending-tokens)]
+                                                   (if (seq ks)
+                                                     (recur (update x (first ks) (partial filter #(not (<= (:idx partner) (:idx %) idx))) )
+                                                            (next ks))
+                                                     x)))
                                     ;; no parter found
                                     (if (= :close direction)
                                       ;; discard
@@ -132,7 +151,7 @@
                            [result pending-tokens])))
         process-layer (fn process-layer [tokens]
                         (let []
-                          (loop [ids (keys all-tokens-by-id)
+                          (loop [ids (keys tokens)
                                  all-result []
                                  all-pending-tokens tokens]
                             (if (and (seq ids) (seq all-pending-tokens)) 
