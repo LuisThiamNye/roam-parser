@@ -90,70 +90,57 @@
                                  (apply merge (map #(hash-map (:id %) []) delimiters))
                                  all-tokens)
         add-opener #(conj % {:idx (:idx %2) :length (:length %2)})
-        process-token (fn [id tokens-by-id all-pending-tokens  process-layer]
-                        (loop [ts (get tokens-by-id id)
+        process-token (fn [id all-pending-tokens  process-layer]
+                        (loop [ts (get all-tokens-by-id id)
                                result []
                                openers []
-                               pending-tokens all-pending-tokens
-                               tbid tokens-by-id]
+                               pending-tokens all-pending-tokens]
                           (if (and (seq pending-tokens) (seq ts))
-                            (let [t (first ts)
-                                  {:keys [direction next-idx length idx] :as current-token} (get pending-tokens (:idx t))
-                                 next-up (next ts)]
-                             (if (= :open direction)
-                               (recur  next-up
-                                       result
-                                       (add-opener openers current-token)
-                                       pending-tokens
-                                       tbid)
-                               (if-let [partner (last openers)]
-                                 (let [next-tbid (loop [x tbid
-                                                        ks (keys tbid)]
-                                                   (if (some? ks)
-                                                     (recur (update x (first ks) (partial filter #(not (<= (:idx partner) (:idx %) idx))) )
-                                                            (next ks))
-                                                     x))]
-                                   (recur  next-up
-                                           (conj result {:start (+ (:idx partner) (:length partner))
-                                                         :end idx
-                                                         :children (process-layer
-                                                                    (select-keys pending-tokens (for [[k v] pending-tokens :when (< (:idx partner) (:idx v) idx)] k))
-                                                                    (loop [x tbid
-                                                                           ks (keys tbid)]
-                                                                      (if (some? ks)
-                                                                        (recur (update x (first ks) (partial filter #(< (:idx partner) (:idx %) idx)) )
-                                                                               (next ks))
-                                                                        x)))})
-                                           (pop openers)
-                                           (select-keys pending-tokens (for [[k v] pending-tokens :when (not (<= (:idx partner) (:idx v) idx))] k))
-                                           next-tbid))
-                                 ;; no parter found
-                                 (if (= :close direction)
-                                   ;; discard
-                                   (recur  next-up
-                                           result
-                                           openers
-                                           pending-tokens
-                                           tbid)
-                                   ;; dual -> add as opener
-                                   (recur  next-up
-                                           result
-                                           (add-opener openers current-token)
-                                           pending-tokens
-                                           tbid)))))
-                           [result pending-tokens tbid])))
-        process-layer (fn process-layer [tokens tokens-by-id]
+                            (if-let [original-token (get pending-tokens (:idx (first ts)))]
+                              (let [{:keys [direction next-idx length idx]
+                                     :as current-token} original-token
+                                    next-up (next ts)]
+                                (if (= :open direction)
+                                  (recur  next-up
+                                          result
+                                          (add-opener openers current-token)
+                                          pending-tokens)
+                                  (if-let [partner (last openers)]
+                                    (recur  next-up
+                                            (conj result {:start (+ (:idx partner) (:length partner))
+                                                          :end idx
+                                                          :children (process-layer
+                                                                     (select-keys pending-tokens (for [[k v] pending-tokens :when (< (:idx partner) (:idx v) idx)] k)))})
+                                            (pop openers)
+                                            (select-keys pending-tokens (for [[k v] pending-tokens :when (not (<= (:idx partner) (:idx v) idx))] k)))
+                                    ;; no parter found
+                                    (if (= :close direction)
+                                      ;; discard
+                                      (recur  next-up
+                                              result
+                                              openers
+                                              pending-tokens)
+                                      ;; dual -> add as opener
+                                      (recur  next-up
+                                              result
+                                              (add-opener openers current-token)
+                                              pending-tokens)))))
+                              (recur  (next ts)
+                                      result
+                                      openers
+                                      pending-tokens))
+                           [result pending-tokens])))
+        process-layer (fn process-layer [tokens]
                         (let []
-                          (loop [ids (keys tokens-by-id)
+                          (loop [ids (keys all-tokens-by-id)
                                  all-result []
-                                 all-pending-tokens tokens
-                                 all-tbid tokens-by-id]
+                                 all-pending-tokens tokens]
                             (if (and (seq ids) (seq all-pending-tokens)) 
                               (let [id (first ids)
-                                    [result next-pending-tokens next-tbid] (process-token id all-tbid all-pending-tokens  process-layer)]
-                                (recur (next ids) (concat all-result result) next-pending-tokens next-tbid))
+                                    [result next-pending-tokens] (process-token id all-pending-tokens  process-layer)]
+                                (recur (next ids) (concat all-result result) next-pending-tokens))
                               all-result))))]
-    (process-layer all-tokens all-tokens-by-id)))
+    (process-layer all-tokens)))
 
 (defn parse-block [block]
   (let []
