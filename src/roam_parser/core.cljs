@@ -92,72 +92,73 @@
                                               :length length
                                               :idx idx})))
                        tbid))
-        all-tokens-by-id (reduce #(let [[k t] %2]
-                                    (update % (:id t)
-                                            conj {:idx k :length (:length t)}))
-                                 (apply merge (map #(hash-map (:id %) []) delimiters))
-                                 all-tokens)
         add-opener #(conj % {:idx (:idx %2) :length (:length %2)})
-        process-token (fn [id all-pending-tokens  process-layer]
-                        (loop [ts (get all-pending-tokens id)
-                               result []
-                               openers []
-                               pending-tokens all-pending-tokens]
-                          (if (and (seq pending-tokens) (seq ts))
-                            (if-let [original-token (first ts)]
-                              (let [{:keys [id direction next-idx length idx]
-                                     :as current-token} original-token
-                                    next-up (next ts)]
-                                (if (= :open direction)
-                                  (recur  next-up
-                                          result
-                                          (add-opener openers current-token)
-                                          pending-tokens)
-                                  (if-let [partner (last openers)]
-                                    (recur  next-up
-                                            (conj result {:start (+ (:idx partner) (:length partner))
-                                                          :end idx
-                                                          :id id
-                                                          :children (process-layer
-                                                                     (loop [x pending-tokens
-                                                                            ks (keys pending-tokens)]
-                                                                       (if (seq ks)
-                                                                         (recur (update x (first ks) (partial filter #(< (:idx partner) (:idx %) idx)) )
-                                                                                (next ks))
-                                                                         x)))})
-                                            (pop openers)
-                                            (loop [x pending-tokens
-                                                   ks (keys pending-tokens)]
-                                                   (if (seq ks)
-                                                     (recur (update x (first ks) (partial filter #(not (<= (:idx partner) (:idx %) idx))) )
-                                                            (next ks))
-                                                     x)))
-                                    ;; no parter found
-                                    (if (= :close direction)
-                                      ;; discard
-                                      (recur  next-up
-                                              result
-                                              openers
-                                              pending-tokens)
-                                      ;; dual -> add as opener
-                                      (recur  next-up
-                                              result
-                                              (add-opener openers current-token)
-                                              pending-tokens)))))
-                              (recur  (next ts)
-                                      result
-                                      openers
-                                      pending-tokens))
-                           [result pending-tokens])))
         process-layer (fn process-layer [tokens]
-                        (let []
+                        (let [process-token (fn [id all-pending-tokens all-result]
+                                              (loop [ts (get all-pending-tokens id)
+                                                     result all-result
+                                                     openers []
+                                                     pending-tokens all-pending-tokens]
+                                                (if (and (seq pending-tokens) (seq ts))
+                                                  (if-let [original-token (first ts)]
+                                                    (let [{:keys [id direction next-idx length idx]
+                                                           :as current-token} original-token
+                                                          next-up (next ts)]
+                                                      (if (= :open direction)
+                                                        (recur  next-up
+                                                                result
+                                                                (add-opener openers current-token)
+                                                                pending-tokens)
+                                                        (if-let [partner (last openers)]
+                                                          ;; found a matching pair, add to results
+                                                          (let [start-idx (+ (:idx partner) (:length partner))
+                                                                children (filter #(<= start-idx (:start %) idx) result)
+                                                                next-result (if (seq children)
+                                                                              (filter #(not (<= start-idx (:start %) idx)) result)
+                                                                              result)]
+                                                            (recur  next-up
+                                                                    (conj next-result {:start start-idx
+                                                                                  :end idx
+                                                                                  :id id
+                                                                                  :children (concat (process-layer
+                                                                                                     (loop [x pending-tokens
+                                                                                                            ks (keys pending-tokens)]
+                                                                                                       (if (seq ks)
+                                                                                                         (recur (update x (first ks) (partial filter #(< (:idx partner) (:idx %) idx)) )
+                                                                                                                (next ks))
+                                                                                                         x)))
+                                                                                                    children)})
+                                                                    (pop openers)
+                                                                    (loop [x pending-tokens
+                                                                           ks (keys pending-tokens)]
+                                                                      (if (seq ks)
+                                                                        (recur (update x (first ks) (partial filter #(not (<= (:idx partner) (:idx %) idx))) )
+                                                                               (next ks))
+                                                                        x))))
+                                                          ;; no parter found
+                                                          (if (= :close direction)
+                                                            ;; discard
+                                                            (recur  next-up
+                                                                    result
+                                                                    openers
+                                                                    pending-tokens)
+                                                            ;; dual -> add as opener
+                                                            (recur  next-up
+                                                                    result
+                                                                    (add-opener openers current-token)
+                                                                    pending-tokens)))))
+                                                    (recur  (next ts)
+                                                            result
+                                                            openers
+                                                            pending-tokens))
+                                                  [result pending-tokens])))]
                           (loop [ids (keys tokens)
                                  all-result []
                                  all-pending-tokens tokens]
                             (if (and (seq ids) (seq all-pending-tokens)) 
                               (let [id (first ids)
-                                    [result next-pending-tokens] (process-token id all-pending-tokens  process-layer)]
-                                (recur (next ids) (concat all-result result) next-pending-tokens))
+                                    [result next-pending-tokens] (process-token id all-pending-tokens all-result)]
+                                (recur (next ids) result next-pending-tokens))
                               all-result))))]
     (process-layer all-tokens)))
 
