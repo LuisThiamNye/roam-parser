@@ -83,14 +83,24 @@
                              idx (:idx m)]
                          (recur (next match-stack)
                                 (update tbid element
-                                        conj {:id element
-                                              :direction (case direction
-                                                           "O" :open
-                                                           "C" :close
-                                                           :dual)
-                                              :next-idx (+ idx length)
-                                              :length length
-                                              :idx idx})))
+                                        conj (merge (if element
+                                                      {:id element
+                                                       :direction (case direction
+                                                                    "O" :open
+                                                                    "C" :close
+                                                                    :dual)}
+                                                      (case (first (:text m))
+                                                        "(" {:id "round"
+                                                             :direction :open}
+                                                        ")" {:id "round"
+                                                             :direction :close}
+                                                        "[" {:id "square"
+                                                             :direction :open}
+                                                        "]" {:id "square"
+                                                             :direction :close}))
+                                                    {:next-idx (+ idx length)
+                                                     :length length
+                                                     :idx idx}))))
                        tbid))
         add-opener #(conj % {:idx (:idx %2) :length (:length %2)})
         process-layer (fn process-layer [tokens]
@@ -100,42 +110,47 @@
                                                      openers []
                                                      pending-tokens all-pending-tokens]
                                                 (if (and (seq pending-tokens) (seq ts))
-                                                  (if-let [original-token (first ts)]
-                                                    (let [{:keys [id direction next-idx length idx]
-                                                           :as current-token} original-token
-                                                          next-up (next ts)]
+                                                  (if-let [current-token (first ts)]
+                                                    (let [{:keys [id direction next-idx length idx]} current-token
+                                                          next-up (next ts)
+                                                          delimiter-length 2]
                                                       (if (= :open direction)
                                                         (recur  next-up
                                                                 result
                                                                 (add-opener openers current-token)
                                                                 pending-tokens)
+                                                        ;; found potential closer
                                                         (if-let [partner (last openers)]
                                                           ;; found a matching pair, add to results
-                                                          (let [start-idx (+ (:idx partner) (:length partner))
+                                                          (let [start-idx (+ (:idx partner) delimiter-length)
                                                                 children (filter #(<= start-idx (:start %) idx) result)
                                                                 next-result (if (seq children)
                                                                               (filter #(not (<= start-idx (:start %) idx)) result)
-                                                                              result)]
+                                                                              result)
+                                                                filter-tokens (fn [f] (loop [x pending-tokens
+                                                                                            ks (keys pending-tokens)]
+                                                                                       (if (seq ks)
+                                                                                         (recur (update x (first ks) (partial filter f) )
+                                                                                                (next ks))
+                                                                                         x)))]
                                                             (recur  next-up
                                                                     (conj next-result {:start start-idx
-                                                                                  :end idx
-                                                                                  :id id
-                                                                                  :children (concat (process-layer
-                                                                                                     (loop [x pending-tokens
-                                                                                                            ks (keys pending-tokens)]
-                                                                                                       (if (seq ks)
-                                                                                                         (recur (update x (first ks) (partial filter #(< (:idx partner) (:idx %) idx)) )
-                                                                                                                (next ks))
-                                                                                                         x)))
-                                                                                                    children)})
-                                                                    (pop openers)
-                                                                    (loop [x pending-tokens
-                                                                           ks (keys pending-tokens)]
-                                                                      (if (seq ks)
-                                                                        (recur (update x (first ks) (partial filter #(not (<= (:idx partner) (:idx %) idx))) )
-                                                                               (next ks))
-                                                                        x))))
-                                                          ;; no parter found
+                                                                                       :end (if (= :close direction)
+                                                                                              (+ idx (- length delimiter-length))
+                                                                                              idx)
+                                                                                       :id id
+                                                                                       :children (concat (process-layer
+                                                                                                          (filter-tokens #(< (:idx partner) (:idx %) idx)))
+                                                                                                         children)})
+                                                                    (cond-> (pop openers)
+                                                                      (and (= :dual direction)
+                                                                           (>= length (* 2 delimiter-length)))
+                                                                      (add-opener (-> current-token
+                                                                                      (update :idx + delimiter-length)
+                                                                                      (update :length - delimiter-length))))
+                                                                    ;; update pending tokens
+                                                                    (filter-tokens #(not (<= (:idx partner) (:idx %) idx)))))
+                                                          ;; no partner found
                                                           (if (= :close direction)
                                                             ;; discard
                                                             (recur  next-up
@@ -147,6 +162,62 @@
                                                                     result
                                                                     (add-opener openers current-token)
                                                                     pending-tokens)))))
+                                                    (recur  (next ts)
+                                                            result
+                                                            openers
+                                                            pending-tokens))
+                                                  [result pending-tokens])))
+                              pair-brackets (fn [id all-pending-tokens all-results]
+                                              (loop [ts (get all-pending-tokens id)
+                                                     result all-results
+                                                     openers []
+                                                     pending-tokens all-pending-tokens]
+                                                (if (and (seq pending-tokens) (seq ts))
+                                                  (if-let [current-token (first ts)]
+                                                    (let [{:keys [id direction next-idx length idx]} current-token
+                                                          next-up (next ts)
+                                                          delimiter-length 1]
+                                                      (if (= :open direction)
+                                                        (recur  next-up
+                                                                result
+                                                                (add-opener openers current-token)
+                                                                pending-tokens)
+                                                        ;; found closer
+                                                        (if-let [partner (last openers)]
+                                                          ;; found a matching pair, add to results
+                                                          (let [start-idx (+ (:idx partner) delimiter-length)
+                                                                children (filter #(<= start-idx (:start %) idx) result)
+                                                                next-result (if (seq children)
+                                                                              (filter #(not (<= start-idx (:start %) idx)) result)
+                                                                              result)
+                                                                filter-tokens (fn [f] (loop [x pending-tokens
+                                                                                            ks (keys pending-tokens)]
+                                                                                       (if (seq ks)
+                                                                                         (recur (update x (first ks) (partial filter f) )
+                                                                                                (next ks))
+                                                                                         x)))]
+                                                            (recur  next-up
+                                                                    (conj next-result {:start start-idx
+                                                                                       :end (if (= :close direction)
+                                                                                              (+ idx (- length delimiter-length))
+                                                                                              idx)
+                                                                                       :id id
+                                                                                       :children (concat (process-layer
+                                                                                                          (filter-tokens #(< (:idx partner) (:idx %) idx)))
+                                                                                                         children)})
+                                                                    (cond-> (pop openers)
+                                                                      (and (= :dual direction)
+                                                                           (>= length (* 2 delimiter-length)))
+                                                                      (add-opener (-> current-token
+                                                                                      (update :idx + delimiter-length)
+                                                                                      (update :length - delimiter-length))))
+                                                                    ;; update pending tokens
+                                                                    (filter-tokens #(not (<= (:idx partner) (:idx %) idx)))))
+                                                          ;; no partner found so discard
+                                                          (recur  next-up
+                                                                  result
+                                                                  openers
+                                                                  pending-tokens))))
                                                     (recur  (next ts)
                                                             result
                                                             openers
