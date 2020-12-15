@@ -123,18 +123,16 @@
                                                           next-up (next ts)
                                                           delimiter-length (:length (first (filter #(= (:id %) id) delimiters )))]
                                                       (if (= :open direction)
-                                                        (recur  (cond->> next-up
-                                                                     (and use-greedy (> length (* 2 delimiter-length))) ;; is long enough to have content
-                                                                     (cons (-> current-token
-                                                                               (update :idx + delimiter-length)
-                                                                               (update :length - delimiter-length))))
+                                                        (recur next-up
                                                                 result
                                                                 (add-opener openers current-token)
                                                                 pending-tokens)
                                                         ;; found potential closer
                                                         (if-let [partner (last openers)]
                                                           ;; found a matching pair, add to results
-                                                          (let [start-idx (+ (:idx partner) delimiter-length)
+                                                          (let [start-idx (if use-greedy
+                                                                            (+ (:idx partner) delimiter-length)
+                                                                            (+ (:idx partner) (:length partner)))
                                                                 is-greedy (and use-greedy)
                                                                 end-idx (if is-greedy
                                                                           (+ idx (- length delimiter-length))
@@ -149,14 +147,22 @@
                                                                                          (recur (update x (first ks) (partial filter f) )
                                                                                                 (next ks))
                                                                                          x)))]
-                                                            (recur  next-up
+                                                            (recur  (cond->> next-up
+                                                                      (and (not use-greedy)
+                                                                           (>= (:length partner) (* 2 delimiter-length)))
+                                                                      (cons (-> current-token
+                                                                                (update :length - delimiter-length)
+                                                                                (update :idx + delimiter-length))))
                                                                     (conj next-result {:start start-idx
                                                                                        :end end-idx
                                                                                        :id id
                                                                                        :children (concat (process-layer
                                                                                                           (filter-tokens #(< (:idx partner) (:idx %) idx)))
                                                                                                          children)})
-                                                                    (pop openers)
+                                                                    (cond-> (pop openers)
+                                                                      (and (not use-greedy)
+                                                                           (>= (:length partner) (* 2 delimiter-length)))
+                                                                      (conj (update partner :length - delimiter-length)))
                                                                     ;; update pending tokens
                                                                     (filter-tokens #(not (<= (:idx partner) (:idx %) idx)))))
                                                           ;; no partner found
@@ -167,11 +173,7 @@
                                                                     openers
                                                                     pending-tokens)
                                                             ;; dual -> add as opener
-                                                            (recur (cond->> next-up
-                                                                     (and (> length (* 2 delimiter-length)))
-                                                                     (cons (-> current-token
-                                                                               (update :idx + delimiter-length)
-                                                                               (update :length - delimiter-length))))
+                                                            (recur next-up
                                                                     result
                                                                     (add-opener openers current-token)
                                                                     pending-tokens)))))
@@ -185,7 +187,7 @@
                                  all-pending-tokens tokens]
                             (if (and (seq ids) (seq all-pending-tokens)) 
                               (let [id (first ids)
-                                    [result next-pending-tokens] (process-token id all-pending-tokens all-result true)]
+                                    [result next-pending-tokens] (process-token id all-pending-tokens all-result false)]
                                 (recur (next ids) result next-pending-tokens))
                               all-result))))]
     (process-layer all-tokens)))
