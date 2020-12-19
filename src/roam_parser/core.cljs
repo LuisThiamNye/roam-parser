@@ -1,5 +1,7 @@
 (ns roam-parser.core)
 
+(defn probe [x] (.log js/console x) x)
+
 (defn j-time
   ([name x]
    (if false
@@ -14,36 +16,32 @@
            result))
      (x))))
 
-(def elements {:page {:start "[["
-                      :end "]]"
-                      :fn (fn process [string]
-                            (let [idx (.indexOf (-> elements :page :start))]
-                              4))
-                      :allowed-children #{}}
-               :bold {:start-end "**"
-                      :allowed-children #{}}
-               :italic {:start-end "__"
-                        :allowed-children #{}}
-               :highlight {:start-end "^^"
-                           :allowed-children #{}}})
-
-(def style-markers {:italic "__"
-                    :bold "**"
-                    :highlight "^^"})
-(def style-marks {"__" :italic
-                  "**" :bold
-                  "^^" :highlight})
-
-(defn parse-text [text]
-  (let []))
+(defn process-text [string element]
+  (let [children (sort-by :idx (:children element))
+        text-node (fn [start end]
+                    {:id :text
+                     :content (subs string start end)})]
+    (loop [-children children
+           section-start (:children-start element)
+           output []]
+      (if (seq -children)
+        (let [child (first -children)]
+          (recur (next -children)
+                 (:end child)
+                 (-> output
+                     (conj (text-node section-start (:start child)))
+                     ;; TODO process child
+                     (conj child))))
+        (conj output (text-node section-start (:children-end element)))))))
 
 (def delimiters [{:id :hiccup
-                  :regex #"(?<!\n)^:hiccup(?<hiccupOpen>(?:.|\n)*)"
+                  :regex #"(?<!\n)^:hiccup(?<hiccup>(?:.|\n)*)"
                   :length 7}
                  {:id :blockquote
-                  :regex #"(?<!\n)^(?<blockquoteOpen>>|\[\[>\]\]|#\[\[>\]\])(?=.)"
+                  :regex #"(?<!\n)^(?<blockquot>>|\[\[>\]\]|#\[\[>\]\])(?=.)"
                   :length nil}
                  {:id :hr
+                  :flags #{:single}
                   :regex #"^---$"
                   :length 3}
                  {:id :codeblock
@@ -53,22 +51,27 @@
                   :regex #"`+"
                   :length 1}
                  {:id :curly
+                  :flags #{:bracket}
                   :regex #"\{+|\}+"
                   :length 1}
                  {:id :attribute
+                  :flags #{:single}
                   :regex #"^(?<attribute>\S(?:[^`\{\}\n]*?\S)?)::"
                   :length nil}
                  {:id :latex
                   :regex #"(?<!\$)(?:(?<latexOpen>(?<!\S)\${2}(?=\S))|(?<latexClose>(?<=\S)\${2}(?!\S))|(?<latexDual>(?<=\S)\${2}(?=\S)))(?!\$)"
                   :length 2}
                  {:id :square
+                  :flags #{:bracket}
                   :regex #"\[+|\]+"
                   :length 1}
                  {:id :round
+                  :flags #{:bracket}
                   :regex #"\(+|\)+"
                   :length 1}
-                 {:regex #"(?<!\*)(?:(?<boldOpen>(?<!\S)\*{2,}(?=\S))|(?<boldClose>(?<=\S)\*{2,}(?!\S))|(?<boldDual>(?<=\S)\*{2,}(?=\S)))(?!\*)"
-                  :id :bold
+                 {:id :bold
+                  :flags #{:greedy}
+                  :regex #"(?<!\*)(?:(?<boldOpen>(?<!\S)\*{2,}(?=\S))|(?<boldClose>(?<=\S)\*{2,}(?!\S))|(?<boldDual>(?<=\S)\*{2,}(?=\S)))(?!\*)"
                   :find-id (fn [token ^js groups fallback]
                              (if-let  [direction (cond (. groups -boldOpen) :open
                                                        (. groups -boldClose) :close
@@ -79,20 +82,51 @@
                   :d {:boldOpen :open
                       :boldClose :close}
                   :length 2}
-                 {:regex #"(?<!_)(?:(?<italicOpen>(?<!\S)_{2,}(?=\S))|(?<italicClose>(?<=\S)_{2,}(?!\S))|(?<italicDual>(?<=\S)_{2,}(?=\S)))(?!_)"
-                  :id :italic
-                  :length 2}
-                 {:regex #"(?<!\^)(?:(?<highlightOpen>(?<!\S)\^{2,}(?=\S))|(?<highlightClose>(?<=\S)\^{2,}(?!\S))|(?<highlightDual>(?<=\S)\^{2,}(?=\S)))(?!\^)"
-                  :id :highlight
+                 {:id :italic
+                  :flags #{:greedy}
+                  :regex #"(?<!_)(?:(?<italicOpen>(?<!\S)_{2,}(?=\S))|(?<italicClose>(?<=\S)_{2,}(?!\S))|(?<italicDual>(?<=\S)_{2,}(?=\S)))(?!_)" :length 2}
+                 {:id :highlight
+                  :flags #{:greedy}
+                  :regex #"(?<!\^)(?:(?<highlightOpen>(?<!\S)\^{2,}(?=\S))|(?<highlightClose>(?<=\S)\^{2,}(?!\S))|(?<highlightDual>(?<=\S)\^{2,}(?=\S)))(?!\^)"
                   :length 2}
                  {:id :tag
-                  :regex #"(?<!#)#(?=\S)"
+                  :flags #{:single}
+                  :regex #"(?<!#)#(?<tag>(?:\S(?<![ \[\]\(\){}`]|\*\*|__|^^|::))+)(?: |$)"
+                  :length 1}
+                 {:id :hash
+                  :regex #"#(?=\[)"
                   :length 1}
                  {:id :image
                   :regex #"!(?=\[)"
                   :length 1}])
 
-(defn probe [x] (.log js/console x) x)
+(defn symbol-data-from-group [group]
+  (let [[element direction] (rest (re-find #"(.*?)([A-Z])[a-z]+$" group))]
+    {:id (keyword (or element group))
+     :direction (case direction
+                  "O" :open
+                  "C" :close
+                  :dual)}))
+
+(defn symbol-data-from-char [first-char]
+  (case first-char
+    "(" {:id :round
+         :direction :open}
+    ")" {:id :round
+         :direction :close}
+    "[" {:id :square
+         :direction :open}
+    "]" {:id :square
+         :direction :close}
+    "{" {:id :curly
+         :direction :open}
+    "}" {:id :curly
+         :direction :close}
+    "`" {:id :mono}
+    "-" {:id :hr}
+    "#" {:id :hash}
+    "!" {:id :image}
+    (.log js/console "Found an unknown symbol")))
 
 (def inline-re (js/RegExp. (let [trim-ends #(.slice % 1 -1)]
                              (reduce #(str %1 "|" %2)
@@ -103,299 +137,279 @@
 
 (defn parse-inline [string]
   (let [matches (.matchAll string inline-re)
+        ;; map of delimiters and their occurrences
         all-tokens (loop [match-stack (for [m matches]
                                         {:idx (.-index m)
-                                         :group (loop [rest-groups (.entries js/Object (.-groups m))]
-                                                  (if rest-groups
-                                                    (let [[name value] (first rest-groups)]
+                                         :group (loop [groups (.entries js/Object (.-groups m))]
+                                                  (if groups
+                                                    (let [[name value] (first groups)]
                                                       (if value
                                                         [name value]
-                                                        (recur (next rest-groups))))
+                                                        (recur (next groups))))
+                                                    ;; does not match any group
                                                     nil))
                                          :text (first m)})
-                          tbid (reduce #(assoc % (:id %2) [])
-                                       {} delimiters)]
+                          output (reduce #(assoc % (:id %2) [])
+                                         {} delimiters)]
                      (if (seq match-stack)
                        (let [m (first match-stack)
                              length (count (:text m))
                              idx (:idx m)
                              group-name (first (:group m))
-                             type (if group-name
-                                    (let [[element direction] (rest (re-find #"(.*?)([A-Z])[a-z]+$" group-name))]
-                                      {:id (keyword (or element group-name))
-                                       :direction (case direction
-                                                    "O" :open
-                                                    "C" :close
-                                                    :dual)
-                                       :text (last (:group m))})
-                                    (case (first (:text m))
-                                      "(" {:id :round
-                                           :direction :open}
-                                      ")" {:id :round
-                                           :direction :close}
-                                      "[" {:id :square
-                                           :direction :open}
-                                      "]" {:id :square
-                                           :direction :close}
-                                      "{" {:id :curly
-                                           :direction :open}
-                                      "}" {:id :curly
-                                           :direction :close}
-                                      "`" {:id :mono
-                                           :direction :dual}
-                                      "-" {:id :hr
-                                           :direction :dual}
-                                      "#" {:id :tag
-                                           :direction :open}
-                                      "!" {:id :image
-                                           :direction :open}
-                                      :?))]
+                             symbol-data (if group-name
+                                           (assoc (symbol-data-from-group group-name)
+                                                  :text (last (:group m)))
+                                           (symbol-data-from-char (first (:text m))))]
                          (recur (next match-stack)
-                                (update tbid (:id type)
-                                        conj (merge type
+                                (update output (:id symbol-data)
+                                        conj (merge symbol-data
                                                     {:length length
                                                      :idx idx}))))
-                       tbid))
-        add-opener #(conj % {:idx (:idx %2) :length (:length %2) :tag %3})
+                       output))
+        filter-tokens (fn [f tks] (loop [x tks
+                                         ks (keys tks)]
+                                    (if (seq ks)
+                                      (recur (update x (first ks) (partial filter f))
+                                             (next ks))
+                                      x)))
+        find-token (fn [tks id idx] (first (filter #(= (:idx %) idx) (get tks id))))
+        add-opener (fn add-opener
+                     ([openers new] (conj openers {:idx (:idx new) :length (:length new)}))
+                     ([openers new tag] (conj openers new {:idx (:idx new) :length (:length new) :tag tag})))
         process-layer (fn process-layer [tokens rules]
-                        (let [process-token (fn [local-rules all-pending-tokens all-result]
-                                              (let [id (first local-rules)
-                                                    use-greedy (not (some #{id} #{:round :square :curly}))
-                                                    use-heavy (boolean (some #{id} #{:curly}))
-                                                    mode (when (some #{id} #{:hr :attribute :tag}) :single)
+                        (let [process-token (fn [delimiter-ids all-pending-tokens all-result]
+                                              (let [id (first delimiter-ids)
+                                                    delimiter-data (first (filter #(= (:id %) id) delimiters))
+                                                    use-greedy (contains? (:flags delimiter-data) :greedy)
+                                                    use-heavy (contains? (:flags delimiter-data) :heavy)
+                                                    is-single (contains? (:flags delimiter-data) :single)
+                                                    is-bracket (contains? (:flags delimiter-data) :bracket)
                                                     heavy-name :render
                                                     heavy-length 2
-                                                    delimiter-length (:length (first (filter #(= (:id %) id) delimiters)))]
-                                                (if (= :single mode)
+                                                    delimiter-length (:length delimiter-data)]
+                                                (if is-single
                                                   (loop [ts (get all-pending-tokens id)
                                                          result all-result]
-                                                    (if (seq ts)
-                                                      (let [current-token (first ts)]
-                                                        (recur (next ts)
-                                                               (conj result (case id
-                                                                              :hr {:start (:idx current-token)
-                                                                                   :end (+ (dec (:length current-token)) (:idx current-token))
-                                                                                   :id id}
-                                                                              :attribute {:start (:idx current-token)
-                                                                                          :end (+ (dec (:idx current-token)) (:length current-token))
-                                                                                          :id id
-                                                                                          :page (:text current-token)}))))
+                                                    (if-let [current-token (first ts)]
+                                                      (recur (next ts)
+                                                             (conj result (case id
+                                                                            :attribute {:start (:idx current-token)
+                                                                                        :end (+ (:idx current-token) (:length current-token))
+                                                                                        :id id
+                                                                                        :page (:text current-token)}
+                                                                            :tag {:start (:idx current-token)
+                                                                                  :end (+ (:idx current-token) (:length current-token))
+                                                                                  :id id
+                                                                                  :page (:text current-token)}
+                                                                            {:start (:idx current-token)
+                                                                             :end (+ (:idx current-token) (:length current-token))
+                                                                             :id id})))
                                                       [result (dissoc all-pending-tokens id)]))
-                                                  (loop [ts (get all-pending-tokens id)
+                                                  (loop [tks (get all-pending-tokens id)
                                                          result all-result
                                                          openers []
-                                                         pending-tokens all-pending-tokens
-                                                         is-active (not use-heavy)]
-                                                    (if (and (seq pending-tokens) (seq ts))
-                                                      (if-let [current-token (first ts)]
-                                                        (let [{:keys [id direction length idx]} current-token
-                                                              next-up (next ts)]
+                                                         pending-tokens all-pending-tokens]
+                                                    (if-let [current-token (first tks)]
+                                                      (let [{:keys [id direction length idx]} current-token
+                                                            next-up (next tks)]
 
-                                                          (if (= :open direction)
-                                                            (recur next-up
-                                                                   result
-                                                                   (if is-active
-                                                                     (add-opener openers current-token (:tag current-token))
-                                                                     (if (>= length heavy-length)
-                                                                       (add-opener openers current-token :heavy)
-                                                                       openers))
-                                                                   pending-tokens
-                                                                   (or (not use-heavy) (>= length heavy-length)))
+                                                        (if (= :open direction)
+                                                          (recur next-up
+                                                                 result
+                                                                 (if (and (= :curly id) (empty? openers) (= length 1))
+                                                                   openers
+                                                                   (add-opener openers current-token (:tag current-token)))
+                                                                 pending-tokens)
 
-                                                            ;; found potential closer
-                                                            (if-let [partner (last openers)]
-                                                              ;; found a matching pair, add to results
-                                                              (let [is-heavy (= :heavy (:tag partner))]
-                                                                (if (or (not is-heavy) (>= length heavy-length))
-                                                                  (let [start-idx (if use-greedy
-                                                                                    (+ (:idx partner) delimiter-length)
-                                                                                    (+ (:idx partner) (:length partner)))
-                                                                        is-greedy (and use-greedy)
-                                                                        partner-length (if is-heavy heavy-length (:length partner))
-                                                                        end-idx (if is-greedy
-                                                                                  (+ idx (- length delimiter-length))
-                                                                                  idx)
-                                                                        loose-children (filter #(<= start-idx (:start %) idx) result)
-                                                                        next-result (if (seq loose-children)
-                                                                                      (filter #(not (<= start-idx (:start %) idx)) result)
-                                                                                      result)
-                                                                        filter-tokens (fn [f] (loop [x pending-tokens
-                                                                                                     ks (keys pending-tokens)]
-                                                                                                (if (seq ks)
-                                                                                                  (recur (update x (first ks) (partial filter f))
-                                                                                                         (next ks))
-                                                                                                  x)))
-                                                                        rest-openers (pop openers)
-                                                                        delim-count (if use-greedy 1 (.floor js/Math (/ (min (:length partner) length) delimiter-length)))
-                                                                        total-length (* delim-count delimiter-length)
-                                                                        outside-tokens (filter-tokens #(not (<= (:idx partner) (:idx %) idx)))]
-                                                                    (if-let  [squares (when (and (= :round id) (= :alias (:tag partner)))
-                                                                                        (first (filter #(= (:end %) (- start-idx total-length 1)) result)))]
-                                                                      ;; make alias
-                                                                      (recur  (cond->> next-up
-                                                                                (and (>= length (+ delimiter-length total-length)))
-                                                                                (cons (-> current-token
-                                                                                          (update :length - total-length)
-                                                                                          (update :idx + total-length))))
-                                                                              (conj (remove #(= (:start %) (:start squares)) next-result)
-                                                                                    {:start (- (:start squares) (dec (:count squares)))
-                                                                                     :end (+ idx total-length -1)
-                                                                                     :id :alias
-                                                                                     :is-image (boolean (seq (filter #(= (:idx %) (- (:start squares) (inc (:count squares)))) (get pending-tokens :image))))
-                                                                                     :description-children (:children squares)
-                                                                                     :link-children (let [new-children (concat (process-layer (filter-tokens #(< (:idx partner) (:idx %) idx))
-                                                                                                                                              (rest local-rules))
-                                                                                                                               loose-children)]
-                                                                                                      (if (> delim-count 2)
-                                                                                                        [{:start start-idx
-                                                                                                          :end end-idx
-                                                                                                          :count 1
-                                                                                                          :id :parenthetical
-                                                                                                          :children new-children}]
-                                                                                                        new-children))})
-                                                                              rest-openers
-                                                                              ;; update pending tokens
-                                                                              outside-tokens
-                                                                              true)
-                                                                      (if (= :square id)
-                                                                        (let [following-round (when (= :square id)
-                                                                                                (first (filter #(= (:idx %) (+ total-length end-idx)) (:round pending-tokens))))
-                                                                              add-result (or following-round (> total-length 1))]
-                                                                          (recur  (cond->> next-up
-                                                                                    (and (>= length (+ total-length delimiter-length)))
+                                                          ;; found potential closer
+                                                          (if-let [partner (last openers)]
+                                                            ;; found a matching pair, add to results
+                                                            (let [quantity (if use-greedy 1
+                                                                               (.floor js/Math (/ (min (:length partner) length) delimiter-length)))
+                                                                  thickness (* quantity delimiter-length)
+                                                                  start-idx (if use-greedy
+                                                                              (:idx partner)
+                                                                              (- (+ (:idx partner) (:length partner)) thickness))
+                                                                  is-greedy use-greedy
+                                                                  partner-length (:length partner)
+                                                                  end-idx (if is-greedy
+                                                                            (+ idx length)
+                                                                            (+ idx thickness))
+                                                                  loose-children (filter #(< start-idx (:start %) idx) result)
+                                                                  sibling-elements (if (seq loose-children)
+                                                                                     (filter #(not (< start-idx (:start %) idx)) result)
+                                                                                     result)
+                                                                  rest-openers (pop openers)
+                                                                  sibling-tokens (filter-tokens #(not (<= (:idx partner) (:idx %) idx)) pending-tokens)
+                                                                  container-element (fn [id new-thickness props]
+                                                                                      (merge props
+                                                                                             {:children-start (+ start-idx new-thickness)
+                                                                                              :children-end (- end-idx new-thickness)
+                                                                                              :id id}))]
+                                                              (if is-bracket
+                                                                (let [next-tokens (cond->> next-up
+                                                                                    (and (>= length (+ thickness delimiter-length)))
                                                                                     (cons (-> current-token
-                                                                                              (update :length - total-length)
-                                                                                              (update :idx + total-length))))
-                                                                                  ;; add results
-                                                                                  (if add-result (conj next-result (cond-> {:start (if following-round
-                                                                                                                                     (inc (:idx partner))
-                                                                                                                                     start-idx)
-                                                                                                                            :end (if following-round
-                                                                                                                                   (dec (:idx following-round))
-                                                                                                                                   end-idx)
-                                                                                                                            :count 1
-                                                                                                                            :id (if following-round id :page)
-                                                                                                                            :children (concat (process-layer (filter-tokens #(< (:idx partner) (:idx %) idx))
-                                                                                                                                                             (rest local-rules))
+                                                                                              (update :length - thickness)
+                                                                                              (update :idx + thickness))))
+                                                                      next-openers (cond-> rest-openers
+                                                                                     ;; split opener into higher level, outer opener if long enough
+                                                                                     (and (>= partner-length (+ thickness delimiter-length)))
+                                                                                     (conj (update partner :length - thickness)))
+                                                                      [next-results
+                                                                       next-sibling-tokens] (cond
+                                                                                              (= id :square) (let [following-round (let [r (find-token pending-tokens :round end-idx)]
+                                                                                                                                     (when (= :open (:direction r)) r))
+                                                                                                                   could-be-page (> quantity 1)]
+                                                                                                               [(if (or following-round could-be-page)
+                                                                                                                  (let [[children-start
+                                                                                                                         children-end
+                                                                                                                         new-id] (if following-round
+                                                                                                                                   [(+ start-idx delimiter-length)
+                                                                                                                                    (- end-idx delimiter-length)
+                                                                                                                                    id]
+                                                                                                                                   [(+ start-idx thickness)
+                                                                                                                                    (- end-idx thickness)
+                                                                                                                                    :page])]
+                                                                                                                    (conj sibling-elements
+                                                                                                                          (cond-> {:start start-idx
+                                                                                                                                   :end end-idx
+                                                                                                                                   :count 1
+                                                                                                                                   :id new-id
+                                                                                                                                   :children-start children-start
+                                                                                                                                   :children-end children-end
+                                                                                                                                   :children (concat
+                                                                                                                                              (process-layer (filter-tokens #(< (:idx partner) (:idx %) idx)
+                                                                                                                                                                            pending-tokens)
+                                                                                                                                                             (rest delimiter-ids))
                                                                                                                                               loose-children)}
-                                                                                                                     (not following-round) (assoc :page/type (if (seq (filter #(= (:idx %) (- start-idx 3))
-                                                                                                                                                                              (:tag pending-tokens)))
-                                                                                                                                                               :bracket-tag
-                                                                                                                                                               :bracket))))
-                                                                                      result)
-                                                                                  ;; openers
-                                                                                  (cond-> rest-openers
-                                                                                    ;; split opener into higher level, outer opener if long enough
-                                                                                    (and (>= partner-length (+ total-length delimiter-length)))
-                                                                                    (conj (update partner :length - total-length)))
-                                                                                  ;; update pending tokens
-                                                                                  (cond-> outside-tokens
-                                                                                    (and (= :square id) following-round)
-                                                                                    ;; mark opening round as potential alias
-                                                                                    (assoc :round (sort-by :idx (conj
-                                                                                                                 (remove #(= (:idx %) (:idx following-round)) (:round outside-tokens))
-                                                                                                                 (assoc following-round :tag :alias)))))
-                                                                                  ;; keep active if opener stack not empty
-                                                                                  true))
-                                                                        (if (= :round id)
-                                                                          ;; non-alias round
-                                                                          (recur  (cond->> next-up
-                                                                                    (and (not use-greedy)
-                                                                                         (>= length (if use-heavy
-                                                                                                      (+ delimiter-length heavy-length)
-                                                                                                      (+ total-length delimiter-length))))
-                                                                                    (cons (-> current-token
-                                                                                              (update :length - total-length)
-                                                                                              (update :idx + total-length))))
-                                                                                  ;; add results
-                                                                                  (if (> total-length 1)
-                                                                                    (conj next-result {:start start-idx
-                                                                                                       :end end-idx
-                                                                                                       :count 1
-                                                                                                       :id :parenthetical
-                                                                                                       :children (concat (process-layer (filter-tokens #(< (:idx partner) (:idx %) idx))
-                                                                                                                                        (rest local-rules))
-                                                                                                                         loose-children)})
-                                                                                    result)
-                                                                                  ;; openers
-                                                                                  (cond-> rest-openers
-                                                                                    ;; split opener into higher level, outer opener if long enough
-                                                                                    (and (not use-greedy) (not is-heavy)
-                                                                                         (>= partner-length (+ total-length delimiter-length)))
-                                                                                    (conj (update partner :length - total-length)))
-                                                                                  ;; update pending tokens
-                                                                                  outside-tokens
-                                                                                  ;; keep active if opener stack not empty
-                                                                                  true)
-                                                                          (recur  (cond->> next-up
-                                                                                    (and (not use-greedy)
-                                                                                         (>= length (if use-heavy
-                                                                                                      (+ delimiter-length heavy-length)
-                                                                                                      (+ total-length delimiter-length))))
-                                                                                    (cons (-> current-token
-                                                                                              (update :length - total-length)
-                                                                                              (update :idx + total-length))))
-                                                                                  ;; add results
-                                                                                  (conj next-result {:start start-idx
-                                                                                                     :end end-idx
-                                                                                                     :last (+ total-length (dec end-idx))
-                                                                                                     :count delim-count
-                                                                                                     :id (if is-heavy heavy-name id)
-                                                                                                     :children (concat (process-layer (filter-tokens #(< (:idx partner) (:idx %) idx))
-                                                                                                                                      (rest local-rules))
-                                                                                                                       loose-children)})
-                                                                                  ;; openers
-                                                                                  (cond-> rest-openers
-                                                                                    ;; split opener into higher level, outer opener if long enough
-                                                                                    (and (not use-greedy) (not is-heavy)
-                                                                                         (>= partner-length (+ total-length delimiter-length)))
-                                                                                    (conj (update partner :length - total-length)))
-                                                                                  ;; update pending tokens
-                                                                                  outside-tokens
-                                                                                  ;; keep active if opener stack not empty
-                                                                                  (or (not is-heavy)
-                                                                                      (boolean (seq rest-openers))))))))
-                                                                  (recur  next-up
-                                                                          result
-                                                                          openers
-                                                                          pending-tokens
-                                                                          is-active)))
-                                                              ;; no partner found
-                                                              (if (= :close direction)
-                                                                ;; discard
-                                                                (recur  next-up
-                                                                        result
-                                                                        openers
-                                                                        pending-tokens
-                                                                        is-active)
-                                                                ;; dual -> add as opener
-                                                                (recur next-up
-                                                                       result
-                                                                       (add-opener openers current-token nil)
-                                                                       pending-tokens
-                                                                       is-active)))))
-                                                        (recur  (next ts)
-                                                                result
-                                                                openers
-                                                                pending-tokens
-                                                                is-active))
-                                                      [(cond-> result
-                                                         ;; find [[]] and (())
-                                                         (= :round id)
-                                                         (identity)
-                                                         (= :mono id)
-                                                         (concat (keep identity (for [o openers]
-                                                                                  (when (> (:length o) (* 2 delimiter-length))
-                                                                                    {:start (+ (:idx o) delimiter-length)
-                                                                                     :end (+ (:idx o) (- (:length o) delimiter-length))
-                                                                                     :id id
-                                                                                     :children "todo"}))))
-                                                         (= :codeblock id)
-                                                         (concat (for [o openers]
-                                                                   {:start (inc (:idx o))
-                                                                    :end (+ (:idx o) (dec (:length o)))
-                                                                    :id :mono
-                                                                    :children "todo: `"})))
+                                                                                                                            (not following-round) (assoc :page/type (if (find-token pending-tokens :hash (dec start-idx))
+                                                                                                                                                                      :bracket-tag
+                                                                                                                                                                      :bracket)))))
+                                                                                                                  result)
+                                                                                                                (cond-> sibling-tokens
+                                                                                                                  following-round
+                                                                                                                  ;; mark opening round as potential alias
+                                                                                                                  (assoc :round (sort-by :idx (conj
+                                                                                                                                               (remove #(= (:idx %) (:idx following-round)) (:round sibling-tokens))
+                                                                                                                                               (assoc following-round :tag :alias)))))])
+                                                                                              (= :alias
+                                                                                                 (:tag partner)) (let [squares (first (filter #(= (:end %) start-idx) result))
+                                                                                                                       is-image (boolean (find-token pending-tokens :image
+                                                                                                                                                     (dec (:start squares))))]
+                                                                                                                   [(conj (remove #(= (:start %) (:start squares)) sibling-elements)
+                                                                                                                          {:start (:start squares)
+                                                                                                                           :divider-idx (dec (:end squares))
+                                                                                                                           :end end-idx
+                                                                                                                           :id :alias
+                                                                                                                           :is-image is-image
+                                                                                                                           :description-children (:children squares)
+                                                                                                                           :link-children (let [new-children (concat (process-layer (filter-tokens #(< (:idx partner) (:idx %) idx)
+                                                                                                                                                                                                   pending-tokens)
+                                                                                                                                                                                    (rest delimiter-ids))
+                                                                                                                                                                     loose-children)]
+                                                                                                                                            (if (> quantity 2)
+                                                                                                                                              [{:start start-idx
+                                                                                                                                                :end end-idx
+                                                                                                                                                :count 1
+                                                                                                                                                :id :parenthetical
+                                                                                                                                                :children new-children}]
+                                                                                                                                              new-children))})
+                                                                                                                    (cond-> sibling-tokens
+                                                                                                                      is-image (update :tag (fn [x]
+                                                                                                                                              (filter #(= (:idx %) (dec (:start squares))) x))))])
+                                                                                              (= id :round) [(if (> thickness delimiter-length)
+                                                                                                               (conj sibling-elements {:start start-idx
+                                                                                                                                       :end end-idx
+                                                                                                                                       :count 1
+                                                                                                                                       :id :parenthetical
+                                                                                                                                       :children (concat
+                                                                                                                                                  (process-layer (filter-tokens #(< (:idx partner) (:idx %) idx)
+                                                                                                                                                                                pending-tokens)
+                                                                                                                                                                 (rest delimiter-ids))
+                                                                                                                                                  loose-children)})
+                                                                                                               result)
+                                                                                                             sibling-tokens]
+                                                                                              (= id :curly) [(conj sibling-elements (if (and (= 1 (count openers))
+                                                                                                                                             ((>= thickness 2)))
+                                                                                                                                      {:start (- (+ (:idx partner) (:length partner)) 2)
+                                                                                                                                       :end (+ idx 2)
+                                                                                                                                       :count 1
+                                                                                                                                       :id :render
+                                                                                                                                       :children (concat
+                                                                                                                                                  (process-layer (filter-tokens #(< (:idx partner) (:idx %) idx)
+                                                                                                                                                                                pending-tokens)
+                                                                                                                                                                 (rest delimiter-ids))
+                                                                                                                                                  loose-children)}
+                                                                                                                                      {:start start-idx
+                                                                                                                                       :end end-idx
+                                                                                                                                       :count quantity
+                                                                                                                                       :id id
+                                                                                                                                       :children (concat
+                                                                                                                                                  (process-layer (filter-tokens #(< (:idx partner) (:idx %) idx)
+                                                                                                                                                                                pending-tokens)
+                                                                                                                                                                 (rest delimiter-ids))
+                                                                                                                                                  loose-children)}))
+                                                                                                             sibling-tokens])]
+                                                                  (recur next-tokens
+                                                                         next-results
+                                                                         next-openers
+                                                                         next-sibling-tokens))
+
+                                                                ;; Ambiguous tokens
+                                                                (recur  (cond->> next-up
+                                                                          (and (not use-greedy)
+                                                                               (>= length (+ thickness delimiter-length)))
+                                                                          (cons (-> current-token
+                                                                                    (update :length - thickness)
+                                                                                    (update :idx + thickness))))
+                                                                        ;; add results
+                                                                        (conj sibling-elements {:start start-idx
+                                                                                                :end end-idx
+                                                                                                :count quantity
+                                                                                                :id id
+                                                                                                :children (concat (process-layer (filter-tokens #(< (:idx partner) (:idx %) idx)
+                                                                                                                                                pending-tokens)
+                                                                                                                                 (rest delimiter-ids))
+                                                                                                                  loose-children)})
+                                                                        ;; openers
+                                                                        (cond-> rest-openers
+                                                                          ;; split opener into higher level, outer opener if long enough
+                                                                          (and (not use-greedy)
+                                                                               (>= partner-length (+ thickness delimiter-length)))
+                                                                          (conj (update partner :length - thickness)))
+                                                                        ;; update pending tokens
+                                                                        sibling-tokens)))
+
+                                                            ;; no partner found
+                                                            (recur next-up
+                                                                   (if (= :codeblock id)
+                                                                     (conj result {:start idx
+                                                                                   :end (+ idx length)
+                                                                                   :id :mono
+                                                                                   :children [{:id :text
+                                                                                               :start (inc idx)
+                                                                                               :end (dec (+ idx length))
+                                                                                               :content (apply str (repeat (- length 2) "`"))}]})
+                                                                     result)
+                                                                   (if (= :close direction)
+                                                                     openers
+                                                                     ;; dual -> add as opener
+                                                                     (add-opener openers current-token))
+                                                                   pending-tokens))))
+
+                                                      [(if (> (count openers) 0)
+                                                         (cond-> result
+                                                           (= :codeblock id)
+                                                           (concat (for [o openers]
+                                                                     {:start (:idx o)
+                                                                      :end (+ (:idx o) (:length o))
+                                                                      :id :mono
+                                                                      :children [{:id :text
+                                                                                  :start (inc (:idx o))
+                                                                                  :end (dec (+ (:idx o) (:length o)))
+                                                                                  :content (apply str (repeat (- (:length o) 2) "`"))}]})))
+                                                         result)
                                                        pending-tokens])))))]
                           (loop [pending-rules rules
                                  all-result []
@@ -406,15 +420,18 @@
                               all-result))))
         hit-tokens (dissoc (select-keys all-tokens (for [[k v] all-tokens :when (seq v)] k))
                            :blockquote :hiccup)
-        rules [:square :round :curly :mono :codeblock :attribute :bold]]
+        rules [:hr :square :round :curly :mono :codeblock :attribute :bold :tag]
+        process-elements (fn [elements]
+                           (for [i elements]
+                             (subs string (:start i) (:end i))))]
     (if-let [hc (first (:hiccup all-tokens))]
-      {:id :hiccup
-       :start 7
-       :end (dec (count string))
-       :children []}
+      [{:id :hiccup
+        :start 7
+        :end (dec (count string))
+        :children []}]
       (if-let [bq (first (:blockquote all-tokens))]
-        {:id :blockquote
-         :start (:length bq)
-         :end (dec (count string))
-         :children (process-layer all-tokens rules)}
+        [{:id :blockquote
+          :start (:length bq)
+          :end (dec (count string))
+          :children (process-layer all-tokens rules)}]
         (process-layer all-tokens rules)))))
