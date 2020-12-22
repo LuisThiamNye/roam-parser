@@ -1,0 +1,14 @@
+{
+    "name": "roam-parser",
+    "description": "description",
+    "version": "1.0.0",
+    "author": "Luis Thiam-Nye",
+    "license": "MIT",
+    "scripts": {},
+    "dependencies": {
+        "ahocorasick": "^1.0.2",
+        "fs": "^0.0.1-security",
+        "shadow-cljs": "^2.11.8"
+    },
+    "devDependencies": {}
+}

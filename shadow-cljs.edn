@@ -1,0 +1,14 @@
+;; shadow-cljs configuration
+{:source-paths ["src"]
+
+ :dependencies [[cider/cider-nrepl "0.25.5"]
+                [binaryage/devtools "1.0.2"]]
+
+ :builds {:test {:target           :browser
+                :asset-path       "js"
+                :output-dir       "resources/public/js"
+                :modules          {:main {:entries [roam-parser.test.core]}}
+                :compiler-options {:infer-externs :auto}
+                :devtools         {:http-port 8021
+                                   :http-root "resources/public"
+                                   :preloads  [shadow.remote.runtime.cljs.browser]}}}}

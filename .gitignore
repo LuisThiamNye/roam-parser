@@ -1,0 +1,9 @@
+
+.clj-kondo/
+.lsp/
+.shadow-cljs/
+resources/public
+.DS_Store
+node_modules/
+yarn.lock
+
