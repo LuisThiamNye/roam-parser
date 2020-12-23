@@ -188,8 +188,8 @@
 
 (defn find-token [tks id idx] (first (filter #(= (:idx %) idx) (get tks id))))
 (defn add-opener
-  ([openers new] (conj openers {:idx (:idx new) :length (:length new)}))
-  ([openers new tag] (conj openers {:idx (:idx new) :length (:length new) :tag tag})))
+  ([openers new] (conj! openers {:idx (:idx new) :length (:length new)}))
+  ([openers new tag] (conj! openers {:idx (:idx new) :length (:length new) :tag tag})))
 
 (defn parse-inline [^string string]
   (let [matches (.matchAll string inline-re)
@@ -322,22 +322,23 @@
                                                   ;; process paired delimiter types
                                                   (loop [tks (get all-pending-tokens id)
                                                          result all-result
-                                                         openers []
+                                                         openers (transient [])
                                                          pending-tokens all-pending-tokens]
                                                     (if-let [current-token (first tks)]
                                                       (let [{:keys [id direction length idx]} current-token
-                                                            next-up (next tks)]
+                                                            next-up (next tks)
+                                                            opener-count (count openers)]
 
                                                         (if (= :open direction)
                                                           (recur next-up
                                                                  result
-                                                                 (if (and (= :curly id) (empty? openers) (= length 1))
+                                                                 (if (and (= :curly id) (zero? opener-count) (= length 1))
                                                                    openers
                                                                    (add-opener openers current-token (:tag current-token)))
                                                                  pending-tokens)
 
                                                           ;; found potential closer
-                                                          (if-let [partner (peek openers)]
+                                                          (if-let [partner (when (pos? opener-count) (nth openers (dec opener-count)))]
                                                             ;; found a matching pair, add to results
                                                             (let [quantity (if use-greedy 1
                                                                                (.floor js/Math (/ (min (:length partner) length) delimiter-length)))
@@ -360,7 +361,7 @@
                                                                   sibling-elements (if (seq loose-children)
                                                                                      (filter #(not (< start-idx (:start %) idx)) result)
                                                                                      result)
-                                                                  rest-openers (pop openers)
+                                                                  rest-openers (pop! openers)
                                                                   sibling-tokens (filter-tokens #(not (<= (:idx partner) (:idx %) idx)) pending-tokens)
                                                                   container-element (fn [id new-thickness props]
                                                                                       (merge props
@@ -507,7 +508,7 @@
                                                                                                                                       parent-id)
                                                                                                                        sibling-tokens])
                                                                                                 (and not-empty
-                                                                                                     (= id :curly)) [(conj sibling-elements (if (and (= 1 (count openers))
+                                                                                                     (= id :curly)) [(conj sibling-elements (if (and (= 1 opener-count)
                                                                                                                                                      (>= thickness 2)
                                                                                                                                                      (not (is-killed :render)))
                                                                                                                                               {:start (- (+ (:idx partner) (:length partner)) 2)
@@ -600,10 +601,10 @@
                                                                      (add-opener openers current-token))
                                                                    pending-tokens))))
 
-                                                      [(if (> (count openers) 0)
+                                                      [(if-let [leftover-openers (when (pos? (count openers)) (persistent! openers))]
                                                          (cond-> result
                                                            (= :codeblock id)
-                                                           (concat (for [o openers]
+                                                           (concat (for [o leftover-openers]
                                                                      {:start (:idx o)
                                                                       :end (+ (:idx o) (:length o))
                                                                       :id :code
@@ -621,6 +622,7 @@
                                 (recur (next pending-rules) result next-pending-tokens))
                               all-result))))
         phase-3 (fn phase-3 [parent start end allowed-children]
+                  ;; TODO
                   (let [is-invisible nil]
                     (let [el-definition (get element-definitions (:id parent))
                           children (apply concat (map (fn [c]
