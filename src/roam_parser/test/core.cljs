@@ -14,8 +14,23 @@
 
 (set! (.-test2 js/window) test-2)
 (set! (.-parc js/window) parser/parse-inline)
+(set! (.-parb js/window) #(do (parser/parse-inline %) nil))
 
 (defn real-test
+  ([start end]
+   (time (loop [i start]
+           (when (<= i end)
+             (parser/parse-inline (nth lines i))
+             (recur (inc i)))))
+   nil)
+  ([start end debug]
+   (if debug
+     (time (doall (for [line (drop start (take end lines))]
+                    (parser/parse-inline (parser/probe line)))))
+     (real-test start end))
+   nil))
+
+(defn real-test2
   ([start end]
    (time (doall (for [line (drop start (take end lines))]
                   (parser/parse-inline line))))
