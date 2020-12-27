@@ -1,5 +1,8 @@
 (ns roam-parser.core (:require [clojure.set]
-                               [goog.string]))
+                               [clojure.string]
+                               [goog.string]
+                               [roam-parser.utils :as utils]
+                               [roam-parser.render :as render]))
 
 (defn probe [x] (.log js/console x) x)
 
@@ -17,14 +20,18 @@
            result))
      (x))))
 
-(def rules [:hr :codeblock :code :curly :square :round :latex :highlight :bold :italic :url :attribute :tag])
+(def rules [:codeblock :code :curly :hr :square :round :latex :highlight :bold :italic :url :attribute :tag])
 
 (def escapable-char-regex #"[\\{}\[\]\(\)`\*_\^:#!\n>]|\${2}")
+
+(def codeblock-re (js/RegExp #"^(?:(javascript|css|html|clojure|common lisp)\n|\n?)(.*(?:[^\n]|$))" "s"))
+(def default-codeblock-lang "javascript")
 
 (def style-el-definition (array-map :allowed-children #{:parenthetical :code :page :alias
                                                         :bold :italic :highlight :url}
                                     :killed-by #{:image :render :latex}
                                     :scope :inline))
+
 (def element-definitions {:block (array-map :allowed-children #{:blockquote :hr :codeblock :code :render :page :bracket-tag
                                                                 :alias :image :parenthetical :latex :bold :italic :highlight
                                                                 :url :attribute :bracket-attribute :tag})
@@ -37,7 +44,7 @@
                                              :killed-by #{:codeblock
                                                           :code}
                                              :delimiters #{:curly}
-                                             :is-invisible :true)
+                                             :invisible? :true)
                           :curly (array-map :allowed-children #{:page :block-ref :curly}
                                             :killed-by #{:codeblock
                                                          :code})
@@ -59,7 +66,7 @@
                           :alias-destination (array-map :allowed-children #{:page :block-ref}
                                                         :killed-by #{:alias}
                                                         :scope :inline
-                                                        :is-invisible :true)
+                                                        :invisible? :true)
                           :parenthetical (array-map :allowed-children #{:code :render :url :latex
                                                                         :bold :highlight :italic
                                                                         :page :alias :parenthetical :image
@@ -188,18 +195,17 @@
 (defn escape-str [^string string] (.replace string str-replace-re "$<escape>"))
 
 (defn filter-tokens [f tks]
-  (loop [x tks
+  (loop [x  tks
          ks (keys tks)]
-    (if (seq ks)
-      (recur (update x (first ks) (partial filter f))
+    (if-let [tk-key (first ks)]
+      (recur (update x tk-key (partial utils/eager-filter f))
              (next ks))
       x)))
 
-(defn find-token [tks id idx] (first (filter #(identical? (:idx %) idx) (get tks id))))
+(defn find-token [tks id idx] (some #(when (identical? (:idx %) idx) %) (get tks id)))
 (defn add-opener
   ([openers new] (conj openers {:idx (:idx new) :length (:length new)}))
   ([openers new tag] (conj openers {:idx (:idx new) :length (:length new) :tag tag})))
-
 
 
 (defn parse-inline [^string string]
@@ -228,7 +234,7 @@
                                                      (or (symbol-data-from-char (nth text 0))
                                                          {:id :ignored})
                                                      (assoc (symbol-data-from-group group-name)
-                                                                                :text (peek group)))
+                                                            :text (peek group)))
                                        new-token (merge symbol-data
                                                         {:length length
                                                          :idx idx})
@@ -264,12 +270,12 @@
                         (let [allowed-ids (filter (get allowed-delimiters parent-id) rules)
                               process-token (fn process-token [delimiter-ids all-pending-tokens all-result]
                                               (let [id (first delimiter-ids)
-                                                    delimiter-data (first (filter #(= (:id %) id) delimiters))
+                                                    delimiter-data (some #(when (= (:id %) id) %) delimiters)
                                                     use-greedy (contains? (:flags delimiter-data) :greedy)
-                                                    is-single (contains? (:flags delimiter-data) :single)
-                                                    is-bracket (contains? (:flags delimiter-data) :bracket)
+                                                    single? (contains? (:flags delimiter-data) :single)
+                                                    bracket? (contains? (:flags delimiter-data) :bracket)
                                                     delimiter-length (:length delimiter-data)]
-                                                (if is-single
+                                                (if single?
 
                                                   ;; process single delimiter types
                                                   (loop [ts (get all-pending-tokens id)
@@ -284,7 +290,7 @@
                                                                                                                (filter #(> (:start %) (:idx current-token)) result)
                                                                                                                result)
                                                                                               page-name (get-sub 0 (:idx current-token))]
-                                                                                          (if (or (.startsWith page-name " ") (> -1 (.indexOf page-name "\n")))
+                                                                                          (if (or (clojure.string/starts-with? page-name " ") (clojure.string/index-of page-name "\n"))
                                                                                             result
                                                                                             (conj sibling-tokens (let [end-idx (+ (:idx current-token) (:length current-token))
                                                                                                                        first-child (first children)
@@ -359,13 +365,13 @@
                                                                   start-idx (if use-greedy
                                                                               (:idx partner)
                                                                               (- (+ (:idx partner) (:length partner)) thickness))
-                                                                  is-greedy use-greedy
+                                                                  greedy? use-greedy
                                                                   partner-length (:length partner)
-                                                                  end-idx (if is-greedy
+                                                                  end-idx (if greedy?
                                                                             (+ idx length)
                                                                             (+ idx thickness))
                                                                   loose-children (filter #(< start-idx (:start %) idx) result)
-                                                                  is-killed (fn is-killed [element-id]
+                                                                  killed? (fn killed? [element-id]
                                                                               (let [el-definition (get element-definitions element-id)]
                                                                                 (or (when-let [killed-by (:killed-by el-definition)]
                                                                                       (some killed-by (keep :id loose-children)))
@@ -381,7 +387,7 @@
                                                                                              {:children-start (+ start-idx new-thickness)
                                                                                               :children-end (- end-idx new-thickness)
                                                                                               :id id}))]
-                                                              (if is-bracket
+                                                              (if bracket?
                                                                 (let [next-tokens (cond->> next-up
                                                                                     (and (>= length (+ thickness delimiter-length)))
                                                                                     (cons (-> current-token
@@ -426,7 +432,7 @@
                                                                                                                                    [:url
                                                                                                                                     (get-sub children-start children-end)]))))]
 
-                                                                                                                (if (and dest-type (not (is-killed element-id)))
+                                                                                                                (if (and dest-type (not (killed? element-id)))
                                                                                                                   [(conj (remove #(identical? (:start %) (:start squares)) sibling-elements)
                                                                                                                          {:start (cond-> (:start squares)
                                                                                                                                    (= :image element-id) dec)
@@ -451,7 +457,7 @@
                                                                                                                      (let [alias-id (if (find-token pending-tokens :! (dec start-idx))
                                                                                                                                       :image
                                                                                                                                       :alias)]
-                                                                                                                       (if (or (is-killed alias-id) (and (not not-empty) (= :alias alias-id)))
+                                                                                                                       (if (or (killed? alias-id) (and (not not-empty) (= :alias alias-id)))
                                                                                                                          [result
                                                                                                                           pending-tokens]
                                                                                                                          [(conj sibling-elements {:end end-idx
@@ -475,7 +481,7 @@
                                                                                                                      (let [page-id (if (find-token pending-tokens :hash (dec start-idx))
                                                                                                                                      :bracket-tag
                                                                                                                                      :page)]
-                                                                                                                       (if (and (is-killed page-id) (not not-empty))
+                                                                                                                       (if (and (killed? page-id) (not not-empty))
                                                                                                                          [result
                                                                                                                           pending-tokens]
                                                                                                                          [(conj sibling-elements {:end end-idx
@@ -498,7 +504,7 @@
                                                                                                                     pending-tokens]))
                                                                                                 (test-if-alias) (try-alias)
                                                                                                 (and not-empty
-                                                                                                     (= id :round)) (if (and (> thickness delimiter-length) (not (is-killed :parenthetical)))
+                                                                                                     (= id :round)) (if (and (> thickness delimiter-length) (not (killed? :parenthetical)))
                                                                                                                       [(conj sibling-elements {:start start-idx
                                                                                                                                                :end end-idx
                                                                                                                                                :count 1
@@ -523,7 +529,7 @@
                                                                                                 (and not-empty
                                                                                                      (= id :curly)) [(conj sibling-elements (if (and (identical? 1 (count openers))
                                                                                                                                                      (>= thickness 2)
-                                                                                                                                                     (not (is-killed :render)))
+                                                                                                                                                     (not (killed? :render)))
                                                                                                                                               {:start (- (+ (:idx partner) (:length partner)) 2)
                                                                                                                                                :end (+ idx 2)
                                                                                                                                                :count 1
@@ -557,7 +563,7 @@
 
                                                                 ;; Ambiguous tokens
                                                                 (let [[next-results
-                                                                       next-tokens] (if (is-killed id)
+                                                                       next-tokens] (if (killed? id)
                                                                                       [result pending-tokens]
                                                                                       [(conj sibling-elements
                                                                                              (merge {:start start-idx
@@ -567,8 +573,11 @@
                                                                                                     (case id
                                                                                                       :code {:content (get-sub (+ delimiter-length start-idx)
                                                                                                                                (- end-idx delimiter-length))}
-                                                                                                      :codeblock {:content (get-sub (+ start-idx delimiter-length)
-                                                                                                                                    (- end-idx delimiter-length))}
+                                                                                                      :codeblock (let [[_ lang content] (->> (get-sub (+ start-idx delimiter-length)
+                                                                                                                                                     (- end-idx delimiter-length))
+                                                                                                                                            (.exec codeblock-re))]
+                                                                                                                   {:language (if (nil? lang) default-codeblock-lang lang)
+                                                                                                                    :content content})
                                                                                                       :latex {:content (get-sub (+ delimiter-length start-idx)
                                                                                                                                 (- end-idx delimiter-length))}
                                                                                        ;; formatting
@@ -603,10 +612,9 @@
                                                                      (conj result {:start idx
                                                                                    :end (+ idx length)
                                                                                    :id :code
-                                                                                   :children [{:id :text
-                                                                                               :start (inc idx)
-                                                                                               :end (dec (+ idx length))
-                                                                                               :content (apply str (repeat (- length 2) "`"))}]})
+                                                                                   :children-start (inc idx)
+                                                                                   :children-end (dec (+ idx length))
+                                                                                   :content (apply str (repeat (- length 2) "`"))})
                                                                      result)
                                                                    (if (= :close direction)
                                                                      openers
@@ -623,10 +631,7 @@
                                                                     :id :code
                                                                     :children-start (inc (:idx o))
                                                                     :children-end (dec (+ (:idx o) (:length o)))
-                                                                    :children [{:id :text
-                                                                                :start (inc (:idx o))
-                                                                                :end (dec (+ (:idx o) (:length o)))
-                                                                                :content (apply str (repeat (- (:length o) 2) "`"))}]})))
+                                                                    :content (apply str (repeat (- (:length o) 2) "`"))})))
                                                          result)
                                                        pending-tokens])))))]
                           (loop [pending-rules allowed-ids
@@ -643,15 +648,15 @@
                                                        (let [child-definition (get element-definitions (:id c))]
                                                          (phase-3 c (:children-start c) (:children-end c)
                                                                   (cond-> (:allowed-children child-definition)
-                                                                    (not (:is-invisible child-definition)) (clojure.set/intersection allowed-children))))
+                                                                    (not (:invisible? child-definition)) (clojure.set/intersection allowed-children))))
                                                        [c]))
                                                    (:children parent)))
                         ids (set (keep :id children))
-                        is-killed (or (when-let [killed-by (:killed-by parent-definition)]
+                        killed? (or (when-let [killed-by (:killed-by parent-definition)]
                                         (some killed-by ids))
                                       (when (= :inline (:scope parent-definition))
                                         (seq (filter #(< (:start parent) (:idx %) (:end parent)) (:newline all-tokens)))))]
-                    (if is-killed
+                    (if killed?
                       children
                       [(assoc parent :children (add-text-nodes (filter #(contains? allowed-children (:id %)) children)
                                                                start end))])))
