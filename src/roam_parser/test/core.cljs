@@ -16,29 +16,41 @@
 (set! (.-parc js/window) parser/parse-inline)
 (set! (.-parb js/window) #(do (parser/parse-inline %) nil))
 
-(defn real-test
+
+(defn build-real-results [start end]
+  (reduce #(conj % (parser/parse-inline %2)) [] (subvec lines start end)))
+
+(defn real-test-builder
   ([start end]
-   (time (loop [i start]
-           (when (<= i end)
-             (parser/parse-inline (nth lines i))
-             (recur (inc i)))))
+   (time (doseq [line (subvec lines start end)]
+           (parser/parse-inline line)))
    nil)
   ([start end debug]
    (if debug
-     (time (doall (for [line (drop start (take end lines))]
-                    (parser/parse-inline (parser/probe line)))))
-     (real-test start end))
+     (time (doseq [line (subvec lines start end)]
+             (parser/parse-inline (parser/probe line))))
+     (real-test-builder start end))
    nil))
 
-(defn real-test2
+(set! (.-real js/window) real-test-builder)
+
+
+(defn restring [text]
+  (parser/stringify-block {:children (parser/parse-inline text)}))
+
+(defn real-test-str
   ([start end]
-   (time (doall (for [line (drop start (take end lines))]
-                  (parser/parse-inline line))))
+   (let [bs (build-real-results start end)]
+     (time (doseq [b bs]
+             (parser/stringify-block b))))
    nil)
   ([start end debug]
    (if debug
-     (time (doall (for [line (drop start (take end lines))]
-                    (parser/parse-inline (parser/probe line)))))
-     (real-test start end))
+     (let [bs (build-real-results start end)]
+       (time (doseq [b bs]
+               (parser/stringify-block (parser/probe b)))))
+     (real-test-str start end))
    nil))
-(set! (.-real js/window) real-test)
+
+(set! (.-sfy js/window) restring)
+(set! (.-realstr js/window) real-test-str)
