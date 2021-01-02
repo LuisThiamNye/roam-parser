@@ -5,7 +5,7 @@
                                [roam-parser.render :as render]
                                [roam-parser.builder :as builder]
                                [roam-parser.rules :as rules]
-                               [roam-parser.tokens :as delimiters]))
+                               [roam-parser.tokens :as tokens]))
 
 (defn probe [x] (.log js/console x) x)
 
@@ -29,7 +29,7 @@
 
 
 (defn parse-inline [^string string]
-  (let [matches (.matchAll string delimiters/inline-re)
+  (let [matches (.matchAll string tokens/inline-re)
         ;; map of delimiters and their occurrences
         all-tokens (dissoc (loop [output (transient (hash-map))]
                              (let [iter-item (.next matches)
@@ -47,22 +47,16 @@
                                                      [name value]))
                                                     ;; does not match any group
                                                  [nil nil]))
-                                       length (.-length text)
                                        idx (.-index m)
                                        group-name (nth group 0)
-                                       symbol-data (if (nil? group-name)
-                                                     (or (rules/symbol-data-from-char (nth text 0))
-                                                         {:id :ignored})
-                                                     (assoc (rules/symbol-data-from-group group-name)
-                                                            :text (peek group)))
-                                       new-token (merge symbol-data
-                                                        {:length length
-                                                         :idx idx})
-                                       old-data (get output (:id symbol-data))]
-                                   (recur (assoc! output (:id symbol-data)
+                                       token (if (nil? group-name)
+                                                     (tokens/token-from-text text idx)
+                                                     (tokens/token-from-group group-name (peek group) idx))
+                                       old-data (get output (:id token))]
+                                   (recur (assoc! output (tokens/group-type token)
                                                   (if (nil? old-data)
-                                                    (vector new-token)
-                                                    (conj old-data new-token))))))))
+                                                    (vector token)
+                                                    (conj old-data token))))))))
                            :ignored)
         root-text-elements (fn root-text-elements []
                              (builder/process-children {:id :block
@@ -73,16 +67,16 @@
                                                         :delimiter-queue rules/rules
                                                         :text-mode :insert-text}))]
     (:children (if-let [hc (first (:hiccup all-tokens))]
-       [{:id :hiccup
-         :start 7
-         :end (dec (.-length string))
-         :children []}]
-       (if-let [bq (first (:blockquote all-tokens))]
-         [{:id :blockquote
-           :start (:length bq)
-           :end (dec (.-length string))
-           :children (root-text-elements)}]
-         (root-text-elements))))))
+                 [{:id :hiccup
+                   :start 7
+                   :end (dec (.-length string))
+                   :children []}]
+                 (if-let [bq (first (:blockquote all-tokens))]
+                   [{:id :blockquote
+                     :start (:length bq)
+                     :end (dec (.-length string))
+                     :children (root-text-elements)}]
+                   (root-text-elements))))))
 
 (defn replace-node [f coll new]
   (let [idxs (keep-indexed #(when (f %2) %1) coll)
