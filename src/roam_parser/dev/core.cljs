@@ -1,6 +1,10 @@
-(ns roam-parser.test.core (:require [clojure.string :as cstr]
+(ns roam-parser.dev.core (:require [clojure.string :as cstr]
+                                   [devcards.core :as dc :refer-macros [defcard]]
                                     [roam-parser.core :as parser]
-                                    [roam-parser.test.sample :as sample]))
+                                    [roam-parser.dev.sample :as sample]
+                                    [roam-parser.utils :as utils]))
+
+(dc/start-devcard-ui!)
 
 (def lines (cstr/split sample/text #"\n[ \n]*"))
 
@@ -28,7 +32,7 @@
   ([start end debug]
    (if debug
      (time (doseq [line (subvec lines start end)]
-             (parser/parse-inline (parser/probe line))))
+             (parser/parse-inline (utils/probe line))))
      (real-test-builder start end))
    nil))
 
@@ -48,9 +52,16 @@
    (if debug
      (let [bs (build-real-results start end)]
        (time (doseq [b bs]
-               (parser/stringify-block (parser/probe b)))))
+               (parser/stringify-block (utils/probe b)))))
      (real-test-str start end))
    nil))
 
 (set! (.-sfy js/window) restring)
 (set! (.-realstr js/window) real-test-str)
+
+(defcard lotsof
+  "`[[This [[is]]/**not**/ ![ready](url)]] `"
+  (parser/parse-inline "[[This [[is]]/**not**/ ![ready](url)]] "))
+(defcard some-tests
+  "`[[This [[is]]]]`"
+  (parser/parse-inline "[[This [[is]]]] "))

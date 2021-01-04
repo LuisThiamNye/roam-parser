@@ -1,72 +1,71 @@
-(ns roam-parser.tokens.token )
+(ns roam-parser.tokens.token (:require [roam-parser.tokens.protocols :refer [TokenProtocol]]))
 
-(defprotocol TokenProtocol
-  (group-type [_]))
+
 
 (defrecord Blockquote [idx link-type]
   TokenProtocol
-  (group-type [_] BlockquoteSequence))
+  (group-type [_] Blockquote))
 
 (defrecord Codeblock [idx length direction]
   TokenProtocol
-  (group-type [_] CodeblockSequence))
+  (group-type [_] Codeblock))
 
 (defrecord Backtick [idx length]
   TokenProtocol
-  (group-type [_] BacktickSequence))
+  (group-type [_] Backtick))
 
 
 
 (defrecord Curly [idx length direction]
   TokenProtocol
-  (group-type [_] CurlySequence))
+  (group-type [_] Curly))
 
 (defrecord Square [idx length direction]
   TokenProtocol
-  (group-type [_] SquareSequence))
+  (group-type [_] Square))
 
 (defrecord Round [idx length direction]
   TokenProtocol
-  (group-type [_] RoundSequence))
+  (group-type [_] Round))
 
 (defrecord Latex [idx direction]
   TokenProtocol
-  (group-type [_] LatexSequence))
+  (group-type [_] Latex))
 
 (defrecord Highlight [idx length direction]
   TokenProtocol
-  (group-type [_] HighlightSequence))
+  (group-type [_] Highlight))
 
 (defrecord Bold [idx length direction]
   TokenProtocol
-  (group-type [_] BoldSequence))
+  (group-type [_] Bold))
 
 (defrecord Italic [idx length direction]
   TokenProtocol
-  (group-type [_] ItalicSequence))
+  (group-type [_] Italic))
 
 (defrecord Hr [idx]
   TokenProtocol
-  (group-type [_] HrSequence))
+  (group-type [_] Hr))
 
 
 
 (defrecord Url [idx length]
   TokenProtocol
-  (group-type [_] UrlSequence))
+  (group-type [_] Url))
 
 (defrecord Attribute [idx length]
   TokenProtocol
-  (group-type [_] AttributeSequence))
+  (group-type [_] Attribute))
 
-(defrecord Tag [idx length]
+(defrecord Tag [idx length page-name]
   TokenProtocol
-  (group-type [_] TagSequence))
+  (group-type [_] Tag))
 
-(defrecord Hash [idx char-type]
+(defrecord Hash [idx]
   TokenProtocol
   (group-type [_] ::hash))
 
-(defrecord Bang [idx char-type]
+(defrecord Bang [idx]
   TokenProtocol
   (group-type [_] ::bang))

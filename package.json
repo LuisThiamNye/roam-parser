@@ -7,8 +7,13 @@
     "scripts": {},
     "dependencies": {
         "ahocorasick": "^1.0.2",
+        "create-react-class": "15.6.3",
         "fs": "^0.0.1-security",
+        "highlight.js": "^10.5.0",
         "insect": "^5.6.0",
+        "marked": "^1.2.7",
+        "react": "16.13.1",
+        "react-dom": "16.13.1",
         "shadow-cljs": "^2.11.8"
     },
     "devDependencies": {}

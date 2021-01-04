@@ -5,9 +5,9 @@
                                [roam-parser.render :as render]
                                [roam-parser.builder :as builder]
                                [roam-parser.rules :as rules]
-                               [roam-parser.tokens :as tokens]))
+                               [roam-parser.tokens.core :as tokens]))
 
-(defn probe [x] (.log js/console x) x)
+
 
 (defn j-time
   ([name x]
@@ -22,7 +22,6 @@
            (.timeEnd js/console "time")
            result))
      (x))))
-
 
 
 
@@ -50,22 +49,23 @@
                                        idx (.-index m)
                                        group-name (nth group 0)
                                        token (if (nil? group-name)
-                                                     (tokens/token-from-text text idx)
-                                                     (tokens/token-from-group group-name (peek group) idx))
-                                       old-data (get output (:id token))]
-                                   (recur (assoc! output (tokens/group-type token)
-                                                  (if (nil? old-data)
+                                               (tokens/token-from-text text idx)
+                                               (tokens/token-from-group group-name (peek group) idx (count text)))
+                                       old-tokens-of-type (get output (type token))]
+                                   (recur (assoc! output (type token)
+                                                  (if (nil? old-tokens-of-type)
                                                     (vector token)
-                                                    (conj old-data token))))))))
+                                                    (conj old-tokens-of-type token))))))))
                            :ignored)
         root-text-elements (fn root-text-elements []
-                             (builder/process-children {:id :block
-                                                        :children-start 0
-                                                        :children-end (.-length string)}
-                                                       {:tokens all-tokens
-                                                        :block-string string
-                                                        :delimiter-queue rules/rules
-                                                        :text-mode :insert-text}))]
+                             (builder/process-children
+                              {:parent {:id :block
+                                        :children-start 0
+                                        :children-end (.-length string)}
+                               :tokens all-tokens
+                               :block-string string
+                               :t-seq-order tokens/t-seq-order
+                               :text-mode :insert-text}))]
     (:children (if-let [hc (first (:hiccup all-tokens))]
                  [{:id :hiccup
                    :start 7

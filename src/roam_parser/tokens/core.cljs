@@ -1,32 +1,36 @@
 (ns roam-parser.tokens.core (:require [roam-parser.elements :as el]
-                                     [roam-parser.utils :as utils]
-                                     [roam-parser.rules :as rules]
-                                     [roam-parser.builder :as builder]))
+                                      [roam-parser.utils :as utils]
+                                      [roam-parser.rules :as rules]
+                                      [roam-parser.tokens.sequence :refer [CodeblockSequence BacktickSequence CurlySequence HrSequence SquareSequence RoundSequence LatexSequence HighlightSequence BoldSequence ItalicSequence UrlSequence AttributeSequence TagSequence]]
+                                      [roam-parser.tokens.token :as token]))
 
-(def queue [CodeblockSequence BacktickSequence CurlySequence HrSequence SquareSequence RoundSequence LatexSequence HighlightSequence BoldSequence ItalicSequence UrlSequence AttributeSequence TagSequence])
+;; TODO
+(def t-seq-order [CodeblockSequence BacktickSequence CurlySequence HrSequence SquareSequence RoundSequence LatexSequence HighlightSequence BoldSequence ItalicSequence UrlSequence AttributeSequence TagSequence])
+
+;(def -queue [Codeblock Backtick Curly Hr Square Round Latex Highlight Bold Italic Url Attribute Tag])
 
 (def delimiters [::hiccup (array-map :length 7)
                  ::blockquote (array-map)
                  ::hr (array-map :flags #{:single}
-                            :length 3)
+                                 :length 3)
                  ::codeblock (array-map :flags #{:greedy}
-                            :length 3)
+                                        :length 3)
                  ::backtick (array-map :flags #{:greedy}
-                            :length 1)
+                                       :length 1)
                  ::curly (array-map :flags #{:bracket}
-                            :length 1)
+                                    :length 1)
                  ::attribute (array-map  :flags #{:single})
                  ::latex (array-map :length 2)
                  ::square (array-map :flags #{:bracket}
-                            :length 1)
+                                     :length 1)
                  ::round (array-map  :flags #{:bracket}
-                             :length 1)
+                                     :length 1)
                  ::bold (array-map :flags #{:greedy}
-                            :length 2)
+                                   :length 2)
                  ::italic (array-map :flags #{:greedy}
-                            :length 2)
+                                     :length 2)
                  ::highlight (array-map :flags #{:greedy}
-                            :length 2)
+                                        :length 2)
                  ::tag (array-map :flags #{:single})
                  ::hash (array-map :length 1)
                  ::url (array-map :flags #{:single})
@@ -84,29 +88,43 @@
                    ;; ref: bang / !
                    #"!(?=\[)"])
 
-(defn token-from-group [group]
+(defn token-from-group [group ^string text idx length]
   (case group
-    "blockquote"
-    "tag"
-    "codeblockDual"
-    "codeblockClose"
-    "latexOpen"
-    "latexClose"
-    "latexDual"))
+    "tag" (token/->Tag idx length text)
+    "url" (token/->Url idx length)
+
+    "codeblockDual" (token/->Codeblock idx length :dual)
+    "codeblockClose" (token/->Codeblock idx length :close)
+
+    "latexOpen" (token/->Latex idx :open)
+    "latexClose" (token/->Latex idx :close)
+    "latexDual" (token/->Latex idx :dual)
+
+    "boldOpen" (token/->Bold idx length :open)
+    "boldClose" (token/->Bold idx length :close)
+    "boldDual" (token/->Bold idx length :dual)
+
+    "italicOpen" (token/->Italic idx length :open)
+    "italicClose" (token/->Italic idx length :close)
+    "italicDual" (token/->Italic idx length :dual)
+
+    "highlightOpen" (token/->Highlight idx length :open)
+    "highlightClose" (token/->Highlight idx length :close)
+    "highlightDual" (token/->Highlight idx length :dual)))
 
 (defn token-from-text [^string text idx]
   (case (nth text 0)
-    ")" (->Round idx (count text) :close)
-    "(" (->Round idx (count text) :open)
-    "]" (->Square idx (count text) :close)
-    "[" (->Square idx (count text) :open)
-    "{" (->Curly idx (count text) :open)
-    "}" (->Curly idx (count text) :close)
-    ":" (->Attribute idx (count text))
-    "`" (->Backtick idx (count text))
-    "!" (->Bang idx)
-    "#" (->Hash idx)
-    "-" (->Hr idx)
+    ")" (token/->Round idx (count text) :close)
+    "(" (token/->Round idx (count text) :open)
+    "]" (token/->Square idx (count text) :close)
+    "[" (token/->Square idx (count text) :open)
+    "{" (token/->Curly idx (count text) :open)
+    "}" (token/->Curly idx (count text) :close)
+    ":" (token/->Attribute idx (count text))
+    "`" (token/->Backtick idx (count text))
+    "!" (token/->Bang idx)
+    "#" (token/->Hash idx)
+    "-" (token/->Hr idx)
     nil))
 
 (def escape-seq-regex (str "\\\\(?:" (utils/re-to-str rules/escapable-char-regex) ")"))
@@ -114,6 +132,5 @@
 
 (defn to-regex [^string str] (js/RegExp. str "gm"))
 ;; TODO, faster to use interpose?
-(def inline-re (to-regex (reduce #(str %1 "|" %2) escape-seq-regex
-                                 (utils/eager-map #(utils/re-to-str (:regex %))
-                                      regex-pieces))))
+(def inline-re (to-regex (reduce #(str %1 "|" (utils/re-to-str %2 ))
+                                 escape-seq-regex regex-pieces)))

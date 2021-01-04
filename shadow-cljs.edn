@@ -2,14 +2,18 @@
 {:source-paths ["src"]
 
  :dependencies [[cider/cider-nrepl "0.25.5"]
-                [binaryage/devtools "1.0.2"]]
+                [binaryage/devtools "1.0.2"]
+                [devcards "0.2.7"]]
 
- :builds {:test {:target           :browser
-                 :asset-path       "js"
-                 :output-dir       "resources/public/js"
-                 :modules          {:main {:entries [roam-parser.test.core]}}
-                 :compiler-options {:infer-externs :auto
-                                    :output-feature-set :es-next}
-                 :devtools         {:http-port 8021
-                                    :http-root "resources/public"
-                                    :preloads  [shadow.remote.runtime.cljs.browser]}}}}
+ :builds {:dev {:target           :browser
+                :asset-path       "js"
+                :output-dir       "resources/public/js"
+                :modules          {:main {:entries [roam-parser.dev.core]}}
+                :build-options {:ns-aliases {devcards-marked cljsjs.marked
+                                             devcards-syntax-highlighter cljsjs.highlight}}
+                :compiler-options {:infer-externs :auto
+                                   :output-feature-set :es-next
+                                   :devcards true}
+                :devtools         {:http-port 8021
+                                   :http-root "resources/public"
+                                   :preloads  [shadow.remote.runtime.cljs.browser]}}}}

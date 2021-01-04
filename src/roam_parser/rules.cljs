@@ -1,6 +1,6 @@
 (ns roam-parser.rules (:require [clojure.set]))
 
-(def rules [:codeblock :code :curly :hr :square :round :latex :highlight :bold :italic :url :attribute :tag])
+
 
 (def escapable-char-regex #"[\\{}\[\]\(\)`\*_\^:#!\n>]|\${2}")
 

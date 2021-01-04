@@ -1,4 +1,4 @@
-(ns roam-parser.elements)
+(ns roam-parser.elements (:require [clojure.string]))
 
 (defprotocol ElementProtocol
   "Operations on objects representing whole markdown elements within a block"
@@ -57,22 +57,27 @@
     ;;TODO
     ))
 
+(defprotocol PageLinkProtocol
+  (page-name [_]))
+
 (defrecord PageLink
-           [link-type ^string page-ns ^string page-name children]
+           [link-type ^string page-name namespaces-children]
   ElementProtocol
-  (allowed-children [_] (case link-type
-                          :page #{:page :bold :highlight :italic :alias}
-                          :bracket-tag #{:page :bold :highlight :italic}
-                          :tag nil))
-  (killed-by [_] (case link-type
-                   :page #{:image}
-                   :bracket-tag  #{:image :alias}
-                   :tag nil))
+  (allowed-children [_] #{:page :bold :highlight :italic :alias})
+  (killed-by [_]  #{:image})
   (stringify [_]
-    (str (case link-type :page "[[" :bracket-tag "#[[" :tag \#)
-         (when (some? page-ns)  page-ns "/")
-         (conj page-name)
-         (when (not= :tag link-type) "]]"))))
+    (str "[[" page-name "]]")))
+
+(defrecord BracketTag [^string page-name namespaces-children]
+  ElementProtocol
+  (allowed-children [_]  #{:page :bold :highlight :italic})
+  (killed-by [_]  #{:image :alias})
+  (stringify [_]
+    (str "#[[" page-name "]]")))
+
+(defrecord Tag [^string page-name ns-strings]
+  ElementProtocol
+  (stringify [_] (str \# page-name)))
 
 (defrecord Alias [children destination-type destination]
   ElementProtocol
@@ -141,15 +146,15 @@
   (killed-by [_])
   (stringify [_] url))
 
-(defrecord Attribute [brackets? children]
+(defrecord Attribute [brackets? ^string page-name children]
   ElementProtocol
   (allowed-children [_] (if brackets?
                           #{:bold :italic :highlight :page}
                           #{:bold :italic :highlight}))
   (killed-by [_] (if brackets?
-                    #{:image :alias}
-                    #{:url :latex :block-ref :parenthetical
-                                      :image :alias :bracket-tag :render :code}))
+                   #{:image :alias}
+                   #{:url :latex :block-ref :parenthetical
+                     :image :alias :bracket-tag :render :code}))
   (stringify [_]
     (if brackets?
       (str "[[" (stringify-children children) "]]::")
