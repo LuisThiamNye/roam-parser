@@ -20,41 +20,42 @@
 
 (defn process-paired [injections token-key parser-parameters parser-state]
   (let [close-delimiter  (:close-delimiter injections)]
-    (loop [state (hash-map :pending-tokens (get parser-state :pending-tokens)
-                           :elements (get parser-state :elements)
-                           :free-openers [])]
-      (let [these-pending-tokens (get-in state [:pending-tokens token-key])]
+    (loop [state (assoc parser-state :pending-series-tokens (get-in parser-state [:pending-tokens token-key])
+                        :pending-tokens (dissoc (:pending-tokens parser-state) token-key)
+                           ; :elements (get parser-state :elements)
+                        :free-openers [])]
+      (let [these-pending-tokens (get state :pending-series-tokens)]
         (if (pos? (count these-pending-tokens))
-         (let [current-token                  (nth these-pending-tokens 0)
-               {:keys [direction]} current-token
-               current-state                  (assoc-in state [:pending-tokens token-key]
-                                                        (subvec these-pending-tokens 1))]
-
-           (recur (if (= :open direction)
-                    (update current-state :free-openers
-                            builder/add-opener current-token (:tag current-token))
+          (let [current-token (nth these-pending-tokens 0)
+                {:keys [direction]} current-token
+                next-state (update state :pending-series-tokens subvec 1)]
+            (recur (if (= :open direction)
+                     (update next-state :free-openers
+                             conj current-token)
             ;; found potential closer
-                    (if-let [partner (peek (:free-openers current-state))]
+                     (if-let [partner (peek (:free-openers state))]
               ;; found a matching pair, add to results
-                      (close-delimiter parser-parameters current-state current-token partner)
+                       (close-delimiter parser-parameters state current-token partner)
                 ;; found a (potential) closer but no partner found
-                      (if (= :close direction)
+                       (if (= :close direction)
                        ;; close -> see if anything should be done with orphaned closer
-                        (update current-state :elements
-                                on-abandoned-close current-token)
+                         (update next-state :elements
+                                 on-abandoned-close current-token)
                        ;; dual -> add as opener
-                        (update current-state :free-openers
-                                builder/add-opener current-token))))))
+                         (update next-state :free-openers
+                                 conj current-token))))))
         ;; no more tokens of this type to process -> return
-         state)))))
+          state)))))
 
 
 
 (defn close-codeblock [m parser-parameters]
-  (let [[_ lang content] (->> (builder/get-sub (:block-string parser-parameters) (:children-start m) (:children-end m))
+  (let [[_ lang content] (->> (builder/get-sub (:block-string parser-parameters) (:children-start m) (:children-end m) :no-escape)
                               (.exec rules/codeblock-re))]
-    (assoc (el/map->Codeblock m) :language (if (nil? lang) rules/default-codeblock-lang lang)
-           :content  content)))
+    (assoc (el/map->Codeblock m)
+           :language (if (nil? lang) rules/default-codeblock-lang lang)
+           :content  (builder/escape-str content)
+           :raw-content content)))
 
 (defrecord CodeblockSequence [tokens]
   TokenSequenceProtocol
@@ -74,9 +75,11 @@
               state (:free-openers state)))))
 
 (defn close-backtick [m parser-parameters]
-  (assoc (el/map->Code m) :content
-         (builder/get-sub (:block-string parser-parameters)
-                  (:children-start m) (:children-end m))))
+  (let [raw-content (builder/get-sub (:block-string parser-parameters)
+                                     (:children-start m) (:children-end m) :no-escape)]
+    (assoc (el/map->Code m)
+           :content (builder/escape-str raw-content)
+           :raw-content raw-content)))
 
 (defrecord BacktickSequence [tokens]
   TokenSequenceProtocol
@@ -131,20 +134,34 @@
     (process-paired {:close-delimiter (builder/close-ambiguous-fn 2 (close-formatting-fn :format-type/italic))} token/Italic parser-parameters parser-state)))
 
 
+;;
+;;
+;; singles
+;;
+;;
+
+
 (defn process-single [add-element-fn token-key parser-state]
-  (loop [these-pending-tokens (get-in parser-state [:pending-tokens token-key])
-         state {:pending-tokens (dissoc (:pending-tokens parser-state) token-key)
-                :elements (:elements parser-state)}]
-    (if (pos? (count these-pending-tokens))
-      (let [current-token (nth these-pending-tokens 0)]
-        (recur (subvec these-pending-tokens 1)
+  (loop [pending-series-tokens (get-in parser-state [:pending-tokens token-key])
+         state (assoc parser-state
+                      :pending-tokens (dissoc (:pending-tokens parser-state) token-key))]
+    (if (pos? (count pending-series-tokens))
+      (let [current-token (nth pending-series-tokens 0)]
+        (recur (subvec pending-series-tokens 1)
                (add-element-fn state current-token)))
       state)))
+
+
+(defn add-hr [state current-token]
+  (update state :elements conj (el/map->Hr {:start (:idx current-token)
+                                              :end (+ (:idx current-token) (:length current-token))})))
 
 (defrecord HrSequence [tokens]
   TokenSequenceProtocol
   (process-tokens [this parser-parameters parser-state]
-    (process-single #(builder/add-default-single-element token/map->Hr % %2) token/Hr parser-state)))
+    (if ((:el-type-allowed? parser-parameters) el/Hr)
+      (process-single #(add-hr % %2) token/Hr parser-state)
+      parser-state)))
 
 
 
@@ -163,7 +180,9 @@
 (defrecord UrlSequence [tokens]
   TokenSequenceProtocol
   (process-tokens [this parser-parameters parser-state]
-    (process-single #(add-url parser-parameters % %2) token/Url parser-state)))
+    (if ((:el-type-allowed? parser-parameters) el/Url)
+      (process-single #(add-url parser-parameters % %2) token/Url parser-state)
+      parser-state)))
 
 
 
@@ -201,7 +220,9 @@
 (defrecord AttributeSequence [tokens]
   TokenSequenceProtocol
   (process-tokens [this parser-parameters parser-state]
-    (process-single #(add-attribute parser-parameters % %2) token/Attribute parser-state)))
+    (if ((:el-type-allowed? parser-parameters) el/Attribute)
+      (process-single #(add-attribute parser-parameters % %2) token/Attribute parser-state)
+      parser-state)))
 
 (def page-ns-split-re #"(?<!\\)/")
 ;; TODO escape namespace strings generally
@@ -216,4 +237,6 @@
 (defrecord TagSequence [tokens]
   TokenSequenceProtocol
   (process-tokens [this parser-parameters parser-state]
-    (process-single #(add-tag % %2) token/Tag parser-state)))
+    (if ((:el-type-allowed? parser-parameters) el/Tag)
+      (process-single #(add-tag % %2) token/Tag parser-state)
+      parser-state)))

@@ -9,14 +9,10 @@
 (defn- stringify-children [els]
   (reduce #(str % (stringify %2)) "" els))
 
-(defrecord Block [children]
-  ElementProtocol
-  (allowed-children [_] #{:blockquote :hr :codeblock :code :render :page :bracket-tag
-                          :alias :image :parenthetical :latex :bold :italic :highlight
-                          :url :attribute :bracket-attribute :tag})
-  (killed-by [_])
-  (stringify [_]
-    (stringify-children children)))
+
+(declare Alias)
+(declare Formatting)
+(declare Image)
 
 (defrecord Hiccup [content]
   ElementProtocol
@@ -25,14 +21,7 @@
   (stringify [_]
     (str ":hiccup " content)))
 
-(defrecord BlockQuote [link-type children]
-  ElementProtocol
-  (allowed-children [_] #{:page :render :image :bold :highlight :italic
-                          :alias :parenthetical :hr :code :url :latex
-                          :bracket-tag :tag :block-ref})
-  (killed-by [_])
-  (stringify [_]
-    (str (case link-type :page "[[>]] " :tag "#[[>]] " "> ") (stringify-children children))))
+
 
 (defrecord Codeblock [^string language ^string raw-content ^string content]
   ElementProtocol
@@ -44,34 +33,44 @@
 (defrecord Code [raw-content content]
   ElementProtocol
   (allowed-children [_])
-  (killed-by [_] #{:codeblock})
+  (killed-by [_] #{Codeblock})
   (stringify [_]
     (str \` raw-content \`)))
 
-(defrecord Render []
+(defrecord Latex [content]
   ElementProtocol
-  (allowed-children [_] #{:page :block-ref :curly})
-  (killed-by [_] #{:codeblock
-                   :code})
+  (allowed-children [_])
+  (killed-by [_] #{Codeblock})
   (stringify [_]
-    ;;TODO
-    ))
+    (str "$$" content "$$")))
+
+(defrecord Url [url]
+  ElementProtocol
+  (allowed-children [_])
+  (killed-by [_])
+  (stringify [_] url))
+
+(defrecord Hr []
+  ElementProtocol
+  (allowed-children [_])
+  (killed-by [_])
+  (stringify [_] "---"))
 
 (defprotocol PageLinkProtocol
   (page-name [_]))
 
 (defrecord PageLink
-           [link-type ^string page-name namespaces-children]
+           [^string page-name namespaces-children]
   ElementProtocol
-  (allowed-children [_] #{:page :bold :highlight :italic :alias})
-  (killed-by [_]  #{:image})
+  (allowed-children [_] #{PageLink  Formatting Alias})
+  (killed-by [_]  #{Image})
   (stringify [_]
     (str "[[" page-name "]]")))
 
 (defrecord BracketTag [^string page-name namespaces-children]
   ElementProtocol
-  (allowed-children [_]  #{:page :bold :highlight :italic})
-  (killed-by [_]  #{:image :alias})
+  (allowed-children [_]  #{PageLink  Formatting})
+  (killed-by [_]  #{Image Alias})
   (stringify [_]
     (str "#[[" page-name "]]")))
 
@@ -81,8 +80,8 @@
 
 (defrecord Alias [children destination-type destination]
   ElementProtocol
-  (allowed-children [_]  #{:latex :code :image
-                           :bold :highlight :italic})
+  (allowed-children [_]  #{Latex Code Image
+                           Formatting})
   (killed-by [_])
   (stringify [_]
     (str "[" (stringify-children children) "]("
@@ -94,8 +93,8 @@
 
 (defrecord Image [children destination-type destination]
   ElementProtocol
-  (allowed-children [_] #{:bold :highlight :italic
-                          :image})
+  (allowed-children [_] #{Formatting
+                          Image})
   (killed-by [_])
   (stringify [_]
     (str "[" (stringify-children children) "]("
@@ -106,33 +105,35 @@
 
 (defrecord AliasDestinationVirtual [children]
   ElementProtocol
-  (allowed-children [_] #{:page :block-ref})
-  (killed-by [_] #{:alias})
+  (allowed-children [_] #{PageLink})
+  (killed-by [_] #{Alias})
   (stringify [_]
     (str "(" (stringify-children children) ")")))
 
+(defrecord Render []
+  ElementProtocol
+  (allowed-children [_] #{PageLink})
+  (killed-by [_] #{Codeblock
+                   Code})
+  (stringify [_]
+    ;;TODO
+    ))
+
 (defrecord Parenthetical [children]
   ElementProtocol
-  (allowed-children [_] #{:code :render :url :latex
-                          :bold :highlight :italic
-                          :page :alias :parenthetical :image
-                          :bracket-tag :tag :block-ref})
-  (killed-by [_] #{:codeblock})
+  (allowed-children [_] #{Code Render Url Latex
+                          Formatting
+                          PageLink Alias Parenthetical Image
+                          BracketTag Tag})
+  (killed-by [_] #{Codeblock})
   (stringify [_]
     (str "((" (stringify-children children) "))")))
 
-(defrecord Latex [content]
-  ElementProtocol
-  (allowed-children [_])
-  (killed-by [_] #{:codeblock})
-  (stringify [_]
-    (str "$$" content "$$")))
-
 (defrecord Formatting [format-type children]
   ElementProtocol
-  (allowed-children [_] #{:parenthetical :code :page :alias
-                          :bold :italic :highlight :url})
-  (killed-by [_] #{:image :render :latex})
+  (allowed-children [_] #{Parenthetical Code PageLink Alias
+                          Formatting Url})
+  (killed-by [_] #{Image Render Latex})
   (stringify [_]
     (let [delimiter (case format-type
                       :bold "**"
@@ -140,31 +141,19 @@
                       :highlight "^^")]
       (str delimiter (stringify-children children) delimiter))))
 
-(defrecord Url [url]
-  ElementProtocol
-  (allowed-children [_])
-  (killed-by [_])
-  (stringify [_] url))
-
 (defrecord Attribute [brackets? ^string page-name children]
   ElementProtocol
   (allowed-children [_] (if brackets?
-                          #{:bold :italic :highlight :page}
-                          #{:bold :italic :highlight}))
+                          #{Formatting PageLink}
+                          #{Formatting}))
   (killed-by [_] (if brackets?
-                   #{:image :alias}
-                   #{:url :latex :block-ref :parenthetical
-                     :image :alias :bracket-tag :render :code}))
+                   #{Image Alias}
+                   #{Url Latex Parenthetical
+                     Image Alias BracketTag Render Code}))
   (stringify [_]
     (if brackets?
       (str "[[" (stringify-children children) "]]::")
       (str (stringify-children children) "::"))))
-
-(defrecord Hr []
-  ElementProtocol
-  (allowed-children [_])
-  (killed-by [_])
-  (stringify [_] "---"))
 
 (defrecord Text [content]
   ElementProtocol
@@ -174,7 +163,25 @@
 
 (defrecord Curly [children]
   ElementProtocol
-  (allowed-children [_] #{:page :block-ref :curly})
-  (killed-by [_] #{:codeblock
-                   :code})
+  (allowed-children [_] #{PageLink Curly})
+  (killed-by [_] #{Codeblock
+                   Code})
   (stringify [_] (str "{" (stringify-children children) "}")))
+
+(defrecord BlockQuote [link-type children]
+  ElementProtocol
+  (allowed-children [_] #{PageLink Render Image  Formatting
+                          Alias Parenthetical Hr Code Url Latex
+                          BracketTag Tag})
+  (killed-by [_])
+  (stringify [_]
+    (str (case link-type :page "[[>]] " :tag "#[[>]] " "> ") (stringify-children children))))
+
+(defrecord Block [children]
+  ElementProtocol
+  (allowed-children [_] #{BlockQuote Hr Codeblock Code Render PageLink BracketTag
+                          Alias Image Parenthetical Latex Formatting
+                          Url Attribute Tag})
+  (killed-by [_])
+  (stringify [_]
+    (stringify-children children)))

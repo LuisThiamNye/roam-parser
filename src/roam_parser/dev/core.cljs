@@ -1,8 +1,12 @@
-(ns roam-parser.dev.core (:require [clojure.string :as cstr]
-                                   [devcards.core :as dc :refer-macros [defcard]]
+(ns roam-parser.dev.core
+  (:require [clojure.string :as cstr]
+            [cljs.test :as t :include-macros true]
+                                   [devcards.core :as dc :include-macros true]
                                     [roam-parser.core :as parser]
                                     [roam-parser.dev.sample :as sample]
-                                    [roam-parser.utils :as utils]))
+                                    [roam-parser.elements :as el]
+                                    [roam-parser.utils :as utils])
+    (:require-macros [devcards.core :refer [defcard deftest]]))
 
 (dc/start-devcard-ui!)
 
@@ -59,9 +63,36 @@
 (set! (.-sfy js/window) restring)
 (set! (.-realstr js/window) real-test-str)
 
+(def strs [["[[This [[is]]/**not**/ ![ready](url)]] " "[[This [[is]]/**not**/ ![ready](url)]] "]
+           ["```clojure\ngood```" "```clojure\ngood\n```"]])
+
+(defn ts [i] (let [i i](t/is (= (parser/parse-inline (nth strs i))
+                           (nth strs i)))))
+
+(deftest str-tests
+  (doall (for [[i o] strs] (t/is (= (el/stringify (parser/parse-inline i))
+                                o)))))
+
 (defcard lotsof
   "`[[This [[is]]/**not**/ ![ready](url)]] `"
   (parser/parse-inline "[[This [[is]]/**not**/ ![ready](url)]] "))
+
 (defcard some-tests
   "`[[This [[is]]]]`"
   (parser/parse-inline "[[This [[is]]]] "))
+
+(defcard image
+  "`! [ an image ] ( url )`"
+  (parser/parse-inline "![an image](url)"))
+
+(defcard alias-page
+  "`! [ an image ] ( url )`"
+  (parser/parse-inline "[an]([[page [[name]]]])"))
+
+(defcard alias-bref
+  "`! [ an image ] ( url )`"
+  (parser/parse-inline "[an](((bref)))"))
+
+(defcard no-alias-bref
+  "`! [ an image ] ( url )`"
+  (parser/parse-inline "[an]((bref))"))

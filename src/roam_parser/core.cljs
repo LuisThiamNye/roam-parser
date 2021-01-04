@@ -5,78 +5,18 @@
                                [roam-parser.render :as render]
                                [roam-parser.builder :as builder]
                                [roam-parser.rules :as rules]
-                               [roam-parser.tokens.core :as tokens]))
-
-
-
-(defn j-time
-  ([name x]
-   (if false
-     (do (.log js/console name)
-         (j-time x))
-     (x)))
-  ([x]
-   (if false
-     (do (.time js/console "time")
-         (let [result (x)]
-           (.timeEnd js/console "time")
-           result))
-     (x))))
-
-
-
+                               [roam-parser.elements :as el]
+                               [roam-parser.tokens.core :as tokens]
+                               [roam-parser.builder.block-level :as bl]))
 
 
 (defn parse-inline [^string string]
-  (let [matches (.matchAll string tokens/inline-re)
-        ;; map of delimiters and their occurrences
-        all-tokens (dissoc (loop [output (transient (hash-map))]
-                             (let [iter-item (.next matches)
-                                   m (.-value iter-item)]
-                               (if ^boolean (.-done iter-item)
-                                 (persistent! output)
-                                 (let [text (nth m 0)
-                                       groups (.entries js/Object (.-groups m))
-                                       group-count (.-length groups)
-                                       group (loop [i 0]
-                                               (if (< i group-count)
-                                                 (let [[name value] (nth groups i)]
-                                                   (if (nil? value)
-                                                     (recur (inc i))
-                                                     [name value]))
-                                                    ;; does not match any group
-                                                 [nil nil]))
-                                       idx (.-index m)
-                                       group-name (nth group 0)
-                                       token (if (nil? group-name)
-                                               (tokens/token-from-text text idx)
-                                               (tokens/token-from-group group-name (peek group) idx (count text)))
-                                       old-tokens-of-type (get output (type token))]
-                                   (recur (assoc! output (type token)
-                                                  (if (nil? old-tokens-of-type)
-                                                    (vector token)
-                                                    (conj old-tokens-of-type token))))))))
-                           :ignored)
-        root-text-elements (fn root-text-elements []
-                             (builder/process-children
-                              {:parent {:id :block
-                                        :children-start 0
-                                        :children-end (.-length string)}
-                               :tokens all-tokens
-                               :block-string string
-                               :t-seq-order tokens/t-seq-order
-                               :text-mode :insert-text}))]
-    (:children (if-let [hc (first (:hiccup all-tokens))]
-                 [{:id :hiccup
-                   :start 7
-                   :end (dec (.-length string))
-                   :children []}]
-                 (if-let [bq (first (:blockquote all-tokens))]
-                   [{:id :blockquote
-                     :start (:length bq)
-                     :end (dec (.-length string))
-                     :children (root-text-elements)}]
-                   (root-text-elements))))))
+  (bl/process-block-level {:parent (el/map->Block {:children-start 0
+                                                   :children-end (.-length string)})
+                           :block-string string
+                           :el-type-allowed? (fn [_] true)
+                           :t-seq-order tokens/t-seq-order
+                           :text-mode :insert-text}))
 
 (defn replace-node [f coll new]
   (let [idxs (keep-indexed #(when (f %2) %1) coll)

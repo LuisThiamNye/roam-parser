@@ -26,7 +26,7 @@
             modifier (parse-float (nth match 3))]
         ))))
 
-(def base-re (js/RegExp. #"^([\w-]+|\[\[([\w-]+)\]\])(?::(.+)?|$)" "s"))
+(def base-re (js/RegExp. #"^([\S]+?|\[\[([\S]+?)\]\])(?::\s*(.*)?(?<!\s)|$)" "s"))
 (def form-re (js/RegExp. #"[^\s,]+" "g"))
 
 (defn get-forms [^string string]
