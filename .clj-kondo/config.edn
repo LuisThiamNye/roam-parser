@@ -1,0 +1,2 @@
+{:lint-as {devcards.core/deftest clj-kondo.lint-as/def-catch-all
+           devcards.core/defcard clojure.core/def}}

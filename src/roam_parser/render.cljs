@@ -1,4 +1,11 @@
-(ns roam-parser.render (:require [clojure.string]))
+(ns roam-parser.render (:require [clojure.string]
+                                 [roam-parser.tokens.protocols :refer [TokenSequenceProtocol]]
+                                 [roam-parser.elements :as elements :refer [ElementProtocol Codeblock Code PageLink]]
+                                 [roam-parser.builder :as builder]
+                                 [roam-parser.utils :as utils]
+                                 [roam-parser.tokens.token :refer []]))
+
+(def el-type-allowed?-textual (fn [_] false))
 
 (def component-definitions {"query" {::arg-type :lisp}
                             "embed" {::arg-type :lisp}
@@ -23,36 +30,35 @@
                         "+" +
                         "/" /
                         "*" *)
-            modifier (parse-float (nth match 3))]
-        ))))
+            modifier (parse-float (nth match 3))]))))
 
-(def base-re (js/RegExp. #"^([\S]+?|\[\[([\S]+?)\]\])(?::\s*(.*)?(?<!\s)|$)" "s"))
+(def base-re (js/RegExp. #"^(\[\[([\S]+?)\]\]|[\S]+?)(?::\s*(.*)?(?<!\s)|$)" "s"))
 (def form-re (js/RegExp. #"[^\s,]+" "g"))
 
 (defn get-forms [^string string]
   (reduce conj [] (.match string form-re)))
 
-(defn parse-render [^string string delimiters]
-  (let [match (.exec base-re string)]
+
+
+(defn init-render-element [^string block-string init-map]
+  (let [string (builder/get-sub block-string (:children-start init-map) (:children-end init-map) :no-escape)
+        match (.exec base-re string)]
     (if (nil? match)
       nil
       (let [name (nth match 1)
             page-name (nth match 2)
             content (nth match 3)
-            trimmed-content (when (not (nil? content)) (clojure.string/trim content))
             [comp-name
              linked?] (if (nil? page-name)
                         [name false]
-                        [page-name true])
-            definition (get component-definitions comp-name)
-            unrecognised? (nil? definition)]
-        (merge {::id comp-name
-                ::linked? linked?
-                ::unrecognised? unrecognised?}
-               (case (::arg-type definition)
-                 :none (when (not (clojure.string/blank? content))
-                         {:parse-error {:err-type :warning
-                                        :err-message "This component does not support arguments"}})
-                 :textual {::argument-string trimmed-content}
-                 :hybrid {::arguments nil}
-                 {::arguments nil}))))))
+                        [page-name true])]
+        (elements/map->Render (-> init-map
+                                  (assoc :id comp-name
+                                         :linked? linked?)
+                                  (cond-> (= :textual (get-in component-definitions [comp-name ::arg-type]))
+                                    (assoc :content content))
+                                  (assoc :children-start (if (nil? content)
+                                                           (:children-end init-map)
+                                                           (+ 1 (count name) (:children-start init-map))))))))))
+
+()

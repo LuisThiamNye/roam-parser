@@ -1,51 +1,16 @@
-(ns roam-parser.tokens.sequence (:require [roam-parser.tokens.token :as token]
+(ns roam-parser.tokens.series (:require [roam-parser.tokens.token :as token]
                                           [clojure.string]
                                           [roam-parser.tokens.protocols :refer [TokenSequenceProtocol process-tokens]]
+                                          [roam-parser.render :as render]
                                           [roam-parser.elements :as el]
                                           [roam-parser.utils :as utils]
                                           [roam-parser.rules :as rules]
+                                          [roam-parser.tokens.paired :as paired]
                                           [roam-parser.builder :as builder]))
 
 
 
-(defn on-abandoned-close [current-results current-token]
-  (case (:id current-token)
-    :codeblock (conj current-results {:start (:idx current-token)
-                                      :end (+ (:idx current-token) (:length current-token))
-                                      :id :code
-                                      :children-start (inc (:idx current-token))
-                                      :children-end (dec (+ (:idx current-token) (:length current-token)))
-                                      :content (apply str (repeat (- (:length current-token) 2) "`"))})
-    current-results))
 
-(defn process-paired [injections token-key parser-parameters parser-state]
-  (let [close-delimiter  (:close-delimiter injections)]
-    (loop [state (assoc parser-state :pending-series-tokens (get-in parser-state [:pending-tokens token-key])
-                        :pending-tokens (dissoc (:pending-tokens parser-state) token-key)
-                           ; :elements (get parser-state :elements)
-                        :free-openers [])]
-      (let [these-pending-tokens (get state :pending-series-tokens)]
-        (if (pos? (count these-pending-tokens))
-          (let [current-token (nth these-pending-tokens 0)
-                {:keys [direction]} current-token
-                next-state (update state :pending-series-tokens subvec 1)]
-            (recur (if (= :open direction)
-                     (update next-state :free-openers
-                             conj current-token)
-            ;; found potential closer
-                     (if-let [partner (peek (:free-openers state))]
-              ;; found a matching pair, add to results
-                       (close-delimiter parser-parameters state current-token partner)
-                ;; found a (potential) closer but no partner found
-                       (if (= :close direction)
-                       ;; close -> see if anything should be done with orphaned closer
-                         (update next-state :elements
-                                 on-abandoned-close current-token)
-                       ;; dual -> add as opener
-                         (update next-state :free-openers
-                                 conj current-token))))))
-        ;; no more tokens of this type to process -> return
-          state)))))
 
 
 
@@ -60,18 +25,20 @@
 (defrecord CodeblockSequence [tokens]
   TokenSequenceProtocol
   (process-tokens [this parser-parameters parser-state]
-    (as-> (process-paired {:close-delimiter (builder/close-ambiguous-fn
-                                             3 close-codeblock)} token/Codeblock parser-parameters parser-state)
+    (as-> (paired/process-paired {:close-delimiter (paired/close-ambiguous-fn
+                                                    3 close-codeblock true)}
+                                 token/Codeblock parser-parameters parser-state)
           state
       ;; turn orphaned runs of ```` into coded backticks
       (reduce (fn [s o]
-                (update s :elements conj
-                        (el/map->Codeblock {:start          (:idx o)
-                          :end            (+ (:idx o) (:length o))
-                          :children-start (inc (:idx o))
-                                            :children-end   (dec (+ (:idx o) (:length o)))
-                                            :language rules/default-codeblock-lang
-                          :content        (apply str (repeat (- (:length o) 2) "`"))})))
+                (let [content (apply str (repeat (- (:length o) 2) "`"))]
+                  (update s :elements conj
+                          (el/map->Code {:start          (:idx o)
+                                         :end            (+ (:idx o) (:length o))
+                                         :children-start (inc (:idx o))
+                                         :children-end   (dec (+ (:idx o) (:length o)))
+                                         :content        content
+                                         :raw-content content}))))
               state (:free-openers state)))))
 
 (defn close-backtick [m parser-parameters]
@@ -84,27 +51,27 @@
 (defrecord BacktickSequence [tokens]
   TokenSequenceProtocol
   (process-tokens [this parser-parameters parser-state]
-    (process-paired {:close-delimiter (builder/close-ambiguous-fn
-                                       1 close-backtick)}
+    (paired/process-paired {:close-delimiter (paired/close-ambiguous-fn
+                                       1 close-backtick true)}
                     token/Backtick parser-parameters parser-state)))
 
 ;; TODO ignore any of length 1 if curly not allowed
 (defrecord CurlySequence [tokens]
   TokenSequenceProtocol
   (process-tokens [this parser-parameters parser-state]
-    (process-paired {:close-delimiter builder/close-curly} token/Curly parser-parameters parser-state)))
+    (paired/process-paired {:close-delimiter paired/close-curly} token/Curly parser-parameters parser-state)))
 
 
 
 (defrecord SquareSequence [tokens]
   TokenSequenceProtocol
   (process-tokens [this parser-parameters parser-state]
-    (process-paired {:close-delimiter builder/close-square} token/Square parser-parameters parser-state)))
+    (paired/process-paired {:close-delimiter paired/close-square} token/Square parser-parameters parser-state)))
 
 (defrecord RoundSequence [tokens]
   TokenSequenceProtocol
  (process-tokens [this parser-parameters parser-state]
-    (process-paired {:close-delimiter builder/close-round} token/Round parser-parameters parser-state)))
+    (paired/process-paired {:close-delimiter paired/close-round} token/Round parser-parameters parser-state)))
 
 
 (defn close-latex [m parser-parameters]
@@ -113,7 +80,7 @@
 (defrecord LatexSequence [tokens]
   TokenSequenceProtocol
   (process-tokens [this parser-parameters parser-state]
-    (process-paired {:close-delimiter (builder/close-ambiguous-fn 2 close-latex)} token/Latex parser-parameters parser-state)))
+    (paired/process-paired {:close-delimiter (paired/close-ambiguous-fn 2 close-latex false)} token/Latex parser-parameters parser-state)))
 
 (defn close-formatting-fn [format-type]
   #(assoc (el/map->Formatting %) :format-type format-type))
@@ -121,17 +88,17 @@
 (defrecord HighlightSequence [tokens]
   TokenSequenceProtocol
   (process-tokens [this parser-parameters parser-state]
-    (process-paired {:close-delimiter (builder/close-ambiguous-fn 2 (close-formatting-fn :format-type/highlight))} token/Highlight parser-parameters parser-state)))
+    (paired/process-paired {:close-delimiter (paired/close-ambiguous-fn 2 (close-formatting-fn :format-type/highlight) false)} token/Highlight parser-parameters parser-state)))
 
 (defrecord BoldSequence [tokens]
   TokenSequenceProtocol
   (process-tokens [this parser-parameters parser-state]
-    (process-paired {:close-delimiter (builder/close-ambiguous-fn 2 (close-formatting-fn :format-type/bold))} token/Bold parser-parameters parser-state)))
+    (paired/process-paired {:close-delimiter (paired/close-ambiguous-fn 2 (close-formatting-fn :format-type/bold) false)} token/Bold parser-parameters parser-state)))
 
 (defrecord ItalicSequence [tokens]
   TokenSequenceProtocol
   (process-tokens [this parser-parameters parser-state]
-    (process-paired {:close-delimiter (builder/close-ambiguous-fn 2 (close-formatting-fn :format-type/italic))} token/Italic parser-parameters parser-state)))
+    (paired/process-paired {:close-delimiter (paired/close-ambiguous-fn 2 (close-formatting-fn :format-type/italic) false)} token/Italic parser-parameters parser-state)))
 
 
 ;;
@@ -197,14 +164,14 @@
                          (clojure.string/index-of page-name "\n")))
           (builder/add-element (let [end-idx          (+ (:idx current-token) (:length current-token))
                                      first-child      (when children? (nth children 0))
-                                     brackets? (and (= :page (:id first-child))
+                                     brackets? (and (instance? el/PageLink first-child)
                                                            (identical? 0 (:start first-child))
                                                            (identical? (:idx current-token) (:end first-child)))
                                      common {:start 0
                                              :end   end-idx
                                              :brackets? brackets?}]
                                  (if brackets?
-                                   (el/map->Attribute (assoc common :page-name           (:page first-child)
+                                   (el/map->Attribute (assoc common :page-name           (:page-name first-child)
                                                              :children-start (:children-start first-child)
                                                              :children-end   (:children-end first-child)
                                                              :children       (:children first-child)))
@@ -230,7 +197,7 @@
   (update state :elements conj  (el/map->Tag
                                  {:start (:idx current-token)
                                   :end (+ (:idx current-token) (:length current-token))
-                                  :page-name (:text current-token)
+                                  :page-name (:page-name current-token)
                                   :namespaces (let [strings (clojure.string/split (:text current-token) page-ns-split-re) ]
                                                 (cond-> strings
                                                   (clojure.string/blank? (peek strings)) pop))})))

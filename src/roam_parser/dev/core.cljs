@@ -1,12 +1,12 @@
 (ns roam-parser.dev.core
-  (:require [clojure.string :as cstr]
-            [cljs.test :as t :include-macros true]
-                                   [devcards.core :as dc :include-macros true]
-                                    [roam-parser.core :as parser]
-                                    [roam-parser.dev.sample :as sample]
-                                    [roam-parser.elements :as el]
-                                    [roam-parser.utils :as utils])
-    (:require-macros [devcards.core :refer [defcard deftest]]))
+  (:require
+   [clojure.string :as cstr]
+   [cljs.test :as t :include-macros true]
+   [devcards.core :as dc :include-macros true :refer-macros [deftest defcard]]
+   [roam-parser.core :as parser]
+   [roam-parser.dev.sample :as sample]
+   [roam-parser.elements :as el]
+   [roam-parser.utils :as utils]))
 
 (dc/start-devcard-ui!)
 
@@ -17,82 +17,158 @@
 (def test-str "There are some bugs in our parser - it doesn't handle certain kinds of nesting - and it is a bit of a pain to extend -- also - it is painful whenever we want to make up more specific syntax - like for queries.")
 
 (defn test-2 []
-  (time (doall (for [i (range 1000)] (parser/parse-inline test-str-f))))
+  (time (dotimes [_ 1000] (parser/parse-block test-str-f)))
   nil)
 
 (set! (.-test2 js/window) test-2)
-(set! (.-parc js/window) parser/parse-inline)
-(set! (.-parb js/window) #(do (parser/parse-inline %) nil))
+(set! (.-block js/window) parser/parse-block)
 
 
 (defn build-real-results [start end]
-  (reduce #(conj % (parser/parse-inline %2)) [] (subvec lines start end)))
+  (reduce #(conj % (parser/parse-block %2)) [] (subvec lines start end)))
 
 (defn real-test-builder
   ([start end]
    (time (doseq [line (subvec lines start end)]
-           (parser/parse-inline line)))
+           (parser/parse-block line)))
    nil)
   ([start end debug]
    (if debug
      (time (doseq [line (subvec lines start end)]
-             (parser/parse-inline (utils/probe line))))
+             (parser/parse-block (utils/probe line))))
      (real-test-builder start end))
    nil))
 
-(set! (.-real js/window) real-test-builder)
+(set! (.-help js/window) real-test-builder)
 
 
 (defn restring [text]
-  (parser/stringify-block {:children (parser/parse-inline text)}))
+  (el/stringify (parser/parse-block text)))
 
 (defn real-test-str
   ([start end]
    (let [bs (build-real-results start end)]
      (time (doseq [b bs]
-             (parser/stringify-block b))))
+             (el/stringify b))))
    nil)
   ([start end debug]
    (if debug
      (let [bs (build-real-results start end)]
        (time (doseq [b bs]
-               (parser/stringify-block (utils/probe b)))))
+               (el/stringify (utils/probe b)))))
      (real-test-str start end))
    nil))
 
-(set! (.-sfy js/window) restring)
-(set! (.-realstr js/window) real-test-str)
+(set! (.-str js/window) restring)
+(set! (.-helpstr js/window) real-test-str)
 
 (def strs [["[[This [[is]]/**not**/ ![ready](url)]] " "[[This [[is]]/**not**/ ![ready](url)]] "]
-           ["```clojure\ngood```" "```clojure\ngood\n```"]])
+           ["```clojure\ngood```" "```clojure\ngood\n```"]
+           ["{{Δ:4+7  }}" "{{Δ: 4+7}}"]])
 
-(defn ts [i] (let [i i](t/is (= (parser/parse-inline (nth strs i))
-                           (nth strs i)))))
+(defn ts [i] (let [i i] (t/is (= (parser/parse-block (nth strs i))
+                                 (nth strs i)))))
 
 (deftest str-tests
-  (doall (for [[i o] strs] (t/is (= (el/stringify (parser/parse-inline i))
-                                o)))))
+  (doall (for [[i o] strs] (t/is (= (el/stringify (parser/parse-block i))
+                                    o)))))
 
-(defcard lotsof
-  "`[[This [[is]]/**not**/ ![ready](url)]] `"
-  (parser/parse-inline "[[This [[is]]/**not**/ ![ready](url)]] "))
+(defcard bob
+  "`[[This [[is]]/**not**/ ![egg](url)]] `
+   (image invalidates larger page)"
+  (parser/parse-block "[[This [[is]]/**not**/ ![egg](url)]] "))
 
-(defcard some-tests
-  "`[[This [[is]]]]`"
-  (parser/parse-inline "[[This [[is]]]] "))
+(defcard
+  "`[an]([[page [[name]]]])`"
+  (parser/parse-block "[an]([[page [[name]]]])"))
 
-(defcard image
-  "`! [ an image ] ( url )`"
-  (parser/parse-inline "![an image](url)"))
+(defcard
+  "`[an](((bref)))`"
+  (parser/parse-block "[an](((bref)))"))
 
-(defcard alias-page
-  "`! [ an image ] ( url )`"
-  (parser/parse-inline "[an]([[page [[name]]]])"))
+(defcard
+  "```
+[an]((bref))
+```"
+  (parser/parse-block "[an]((bref))"))
 
-(defcard alias-bref
-  "`! [ an image ] ( url )`"
-  (parser/parse-inline "[an](((bref)))"))
-
-(defcard no-alias-bref
-  "`! [ an image ] ( url )`"
-  (parser/parse-inline "[an]((bref))"))
+(defcard
+  "```
+((parenthetical #tag #[[page]] ))
+```"
+  (parser/parse-block "((parenthetical #tag #[[page]] ))"))
+(defcard
+  "```
+:hiccup code
+```"
+  (parser/parse-block ":hiccup code"))
+(defcard
+  "```
+(visit www.example.com) and https://example.com/?)
+```"
+  (parser/parse-block "(visit www.example.com) and https://example.com/?)"))
+(defcard
+  "```
+[[>]] $$latex$$
+```"
+  (parser/parse-block "[[>]] $$latex$$"))
+(defcard
+  "```
+[[[[other]] attribute]]::
+```"
+  (parser/parse-block "[[[[other]] attribute]]::"))
+(defcard
+  "```
+an attribute::
+```"
+  (parser/parse-block "an attribute::"))
+(defcard
+  "```
+{{∆: {some {content}}}}
+```"
+  (parser/parse-block "{{∆: {some {content}}}}"))
+(defcard
+  "```
+{{∆: }}
+```"
+  (parser/parse-block "{{∆: }}"))
+(defcard
+  "```
+{{∆}}
+```"
+  (parser/parse-block "{{∆}}"))
+(defcard
+  "```
+**__^^all^^ the__ formatting**
+```"
+  (parser/parse-block "**__^^all^^ the__ formatting**"))
+(defcard
+  "```
+backtick: ```
+```"
+  (parser/parse-block "backtick: ```"))
+(defcard
+  "```
+`co\\`de`
+```"
+  (parser/parse-block "`co\\`de`"))
+(defcard
+  "```
+`` `clojure\\ncode```
+```"
+  (parser/parse-block "```clojure\ncode```"))
+(defcard
+  "```
+[[nested [[pages]]]]
+```"
+  (parser/parse-block "[[nested [[pages]]]]"))
+(defcard
+  "```
+[![alias](inside)](alias)
+```"
+  (parser/parse-block "[![alias](inside)](alias)"))
+(defcard
+  "```
+[[ escaping \\[\\[  ]]
+```"
+  (parser/parse-block "[[ escaping \\[\\[  ]]"))

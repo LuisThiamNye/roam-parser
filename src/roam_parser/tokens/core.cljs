@@ -1,40 +1,12 @@
 (ns roam-parser.tokens.core (:require [roam-parser.elements :as el]
                                       [roam-parser.utils :as utils]
                                       [roam-parser.rules :as rules]
-                                      [roam-parser.tokens.sequence :refer [CodeblockSequence BacktickSequence CurlySequence HrSequence SquareSequence RoundSequence LatexSequence HighlightSequence BoldSequence ItalicSequence UrlSequence AttributeSequence TagSequence]]
+                                      [roam-parser.tokens.series :refer [CodeblockSequence BacktickSequence CurlySequence HrSequence SquareSequence RoundSequence LatexSequence HighlightSequence BoldSequence ItalicSequence UrlSequence AttributeSequence TagSequence]]
                                       [roam-parser.tokens.token :as token]))
 
-;; TODO
 (def t-seq-order [CodeblockSequence BacktickSequence CurlySequence HrSequence SquareSequence RoundSequence LatexSequence HighlightSequence BoldSequence ItalicSequence UrlSequence AttributeSequence TagSequence])
 
 ;(def -queue [Codeblock Backtick Curly Hr Square Round Latex Highlight Bold Italic Url Attribute Tag])
-
-(def delimiters [::hiccup (array-map :length 7)
-                 ::blockquote (array-map)
-                 ::hr (array-map :flags #{:single}
-                                 :length 3)
-                 ::codeblock (array-map :flags #{:greedy}
-                                        :length 3)
-                 ::backtick (array-map :flags #{:greedy}
-                                       :length 1)
-                 ::curly (array-map :flags #{:bracket}
-                                    :length 1)
-                 ::attribute (array-map  :flags #{:single})
-                 ::latex (array-map :length 2)
-                 ::square (array-map :flags #{:bracket}
-                                     :length 1)
-                 ::round (array-map  :flags #{:bracket}
-                                     :length 1)
-                 ::bold (array-map :flags #{:greedy}
-                                   :length 2)
-                 ::italic (array-map :flags #{:greedy}
-                                     :length 2)
-                 ::highlight (array-map :flags #{:greedy}
-                                        :length 2)
-                 ::tag (array-map :flags #{:single})
-                 ::hash (array-map :length 1)
-                 ::url (array-map :flags #{:single})
-                 ::bang (array-map  :length 1)])
 
 (def regex-pieces [
                    ;; hiccup
@@ -125,6 +97,7 @@
     "!" (token/->Bang idx)
     "#" (token/->Hash idx)
     "-" (token/->Hr idx)
+    \\ nil
     nil))
 
 (def escape-seq-regex (str "\\\\(?:" (utils/re-to-str rules/escapable-char-regex) ")"))

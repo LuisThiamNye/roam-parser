@@ -13,6 +13,10 @@
 (declare Alias)
 (declare Formatting)
 (declare Image)
+(declare Render)
+(declare Curly)
+(declare Round)
+(declare Square)
 
 (defrecord Hiccup [content]
   ElementProtocol
@@ -97,7 +101,7 @@
                           Image})
   (killed-by [_])
   (stringify [_]
-    (str "[" (stringify-children children) "]("
+    (str "![" (stringify-children children) "]("
          (case destination-type
            :block-ref (str "((" destination "))")
            destination)
@@ -110,14 +114,7 @@
   (stringify [_]
     (str "(" (stringify-children children) ")")))
 
-(defrecord Render []
-  ElementProtocol
-  (allowed-children [_] #{PageLink})
-  (killed-by [_] #{Codeblock
-                   Code})
-  (stringify [_]
-    ;;TODO
-    ))
+
 
 (defrecord Parenthetical [children]
   ElementProtocol
@@ -136,9 +133,9 @@
   (killed-by [_] #{Image Render Latex})
   (stringify [_]
     (let [delimiter (case format-type
-                      :bold "**"
-                      :italic "__"
-                      :highlight "^^")]
+                      :format-type/bold "**"
+                      :format-type/italic "__"
+                      :format-type/highlight "^^")]
       (str delimiter (stringify-children children) delimiter))))
 
 (defrecord Attribute [brackets? ^string page-name children]
@@ -161,12 +158,37 @@
   (killed-by [_])
   (stringify [_] content))
 
+(defrecord Square [children]
+  ElementProtocol
+  (allowed-children [_] #{PageLink Parenthetical Curly Round Square})
+  (killed-by [_] #{Codeblock
+                   Code})
+  (stringify [_] (str "[" (stringify-children children) "]")))
+
+(defrecord Round [children]
+  ElementProtocol
+  (allowed-children [_] #{PageLink Parenthetical Curly Round Square})
+  (killed-by [_] #{Codeblock
+                   Code})
+  (stringify [_] (str "(" (stringify-children children) ")")))
+
 (defrecord Curly [children]
   ElementProtocol
-  (allowed-children [_] #{PageLink Curly})
+  (allowed-children [_] #{PageLink Parenthetical Curly Round Square})
   (killed-by [_] #{Codeblock
                    Code})
   (stringify [_] (str "{" (stringify-children children) "}")))
+
+(defrecord Render [id linked? children]
+  ElementProtocol
+  (allowed-children [_] #{PageLink Parenthetical Curly Round Square})
+  (killed-by [_] #{Codeblock
+                   Code})
+  (stringify [_]
+    (str "{{" (when linked? "[[") id (when linked? "]]")
+         (when (pos? (count children))
+           (str ":" (stringify-children children)))
+         "}}")))
 
 (defrecord BlockQuote [link-type children]
   ElementProtocol

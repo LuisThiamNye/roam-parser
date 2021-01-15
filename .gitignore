@@ -1,9 +1,9 @@
 
-.clj-kondo/
+.clj-kondo/*
+!.clj-kondo/config.edn
 .lsp/
 .shadow-cljs/
 resources/public
 .DS_Store
 node_modules/
 yarn.lock
-

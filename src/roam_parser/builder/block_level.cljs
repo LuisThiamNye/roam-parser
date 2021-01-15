@@ -28,16 +28,17 @@
       (tokens/token-from-group group-name (peek group) idx (count text)))))
 
 (defn matches-to-tokens [matches init-map]
-  (loop [output (transient init-map)]
-    (let [iter-item (.next matches)]
-      (if ^boolean (.-done iter-item)
-        (persistent! output)
-        (let [token (token-from-match (.-value iter-item))
-              old-tokens-of-type (get output (type token))]
-          (recur (assoc! output (type token)
-                         (if (nil? old-tokens-of-type)
-                           (vector token)
-                           (conj old-tokens-of-type token)))))))))
+  (dissoc (loop [output (transient init-map)]
+     (let [iter-item (.next matches)]
+       (if ^boolean (.-done iter-item)
+         (persistent! output)
+         (let [token (token-from-match (.-value iter-item))
+               old-tokens-of-type (get output (type token))]
+           (recur (assoc! output (type token)
+                          (if (nil? old-tokens-of-type)
+                            (vector token)
+                            (conj old-tokens-of-type token))))))))
+          nil))
 
 (defn initial-tokens [match]
   (let [t (token-from-match match)]
