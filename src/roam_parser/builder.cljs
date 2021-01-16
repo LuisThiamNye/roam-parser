@@ -132,14 +132,159 @@
   [parser-parameters]
   {:pre (map? (:tokens parser-parameters))}
   (loop [token-seq-types (:t-seq-order parser-parameters)
-         state {:elements []
-                :pending-tokens (:tokens parser-parameters)}]
+         state           {:elements       []
+                          :pending-tokens (:tokens parser-parameters)}]
     (if (and (pos? (count token-seq-types)))
       (let [token-seq-type (nth token-seq-types 0)
-            token-seq (token-seq-type.)]
-          ;; TODO only allow some delimiters
+            token-seq      (token-seq-type.)]
+        ;; TODO only allow some delimiters
         (if true
           (recur (subvec token-seq-types 1)
                  (process-tokens token-seq parser-parameters state))
           (recur (subvec token-seq-types 1) state)))
       (finalise-children (:parent parser-parameters) (:block-string parser-parameters) (:elements state) (:text-mode parser-parameters)))))
+
+;; TODO
+(defn fallback [context]
+  nil)
+
+(defn process-char [state char string]
+
+  (let [idx (:idx state)]
+    (case char
+      "[" (let [context-order [:context/page-link :context/alias-square :context/text-square]
+                double?       (identical? "[" (nth string (inc idx)))
+                alias-square  {:context/id       :context/alias-square
+                               :open-idx         (inc idx)
+                               :context/elements []
+                               :context/fallback {:context/id       :context/text-square
+                                                  :open-idx         (inc idx)
+                                                  :context/elements []
+                                                  :context/fallback nil}}]
+            (if double?
+              (let [next-idx (+ 2 idx)]
+                (-> state
+                    (update :path conj {:context/id       :context/page-link
+                                        :open-idx         next-idx
+                                        :context/elements []
+                                        :context/fallback alias-square})
+                    (assoc :idx next-idx)))
+              (let [next-idx (inc idx)]
+                (-> state
+                    (update  :path conj alias-square)
+                    (assoc :idx next-idx)))))
+      "]" (let [path       (:path state)
+                last-index (dec (count path))]
+            (loop [i last-index]
+              (if (neg? i)
+                (update state :idx inc)
+                (case (:context/id (nth path i))
+                  :context/page-link    (if (identical? "]" (nth string (inc idx)))
+                                          (if (< i last-index)
+                                            (let [failed-context   (nth path (inc i))
+                                                  fallback-context (fallback failed-context)]
+                                              (-> state
+                                                  (assoc :path (conj (subvec path 0 (inc i))
+                                                                     fallback-context))
+                                                  (assoc :idx (:open-idx (or fallback-context failed-context)))))
+                                            (let [partner (peek path)]
+                                              (-> state
+                                                  (assoc :path (-> path
+                                                                   pop
+                                                                   (update-in [(dec last-index) :context/elements]
+                                                                              conj
+                                                                              (elements/->PageLink (subs string (:open-idx partner) idx)
+                                                                                                   (:context/elements partner)))))
+                                                  (update :idx + 2))))
+                                          (update state :idx inc))
+                  :context/alias-square (update state :idx inc)
+                  :context/text-square  (update state :idx inc)
+                  (recur (dec i))))))
+      (update state :idx inc))))
+
+(defn find-elements [string]
+  (let [str-length (count string)]
+    (loop [state {:path [{:context/id       :context/block
+                          :open-idx         0
+                          :context/elements []}]
+                  :idx  0}]
+      (let [idx (:idx state)]
+        (if (< idx str-length)
+          (let [char (nth string idx)]
+            (recur (process-char state char string) ))
+          (-> state :path (nth 0) :context/elements
+              #_ (conj (elements/->Text (subs string (-> state :elements peek :end))))))))))
+
+(comment
+  (find-elements "[[[[a]]d[[b]]]]hhlolol")
+  (simple-benchmark []   (find-elements "[[[[a]]d[[b]]]]hhlolol") 10000                    )
+
+
+
+  ;; bracket run length lookahead
+  ;; probably better to not as assumption works better
+  #_:clj-kondo/ignore
+  (let [char-count (count (re-find #"\[*" (subs string idx)))
+        n-doubles  (quot char-count 2)
+        a-single?  (pos? (mod char-count 2))]
+    (loop [n n-doubles
+           s state]
+      ))
+
+
+  (simple-benchmark [] {:context/id       :context/alias-square
+                        :open-idx         (inc 54)
+                        :context/elements []} 10000)
+  ;; 7
+
+  (simple-benchmark [] (rand-nth ["a" "b" "c"]) 1000000)
+  ;; 40
+  (simple-benchmark [  ] (case (rand-nth ["a" "b" "c"]) "b" 5 "c" 8 "a" 3 0) 1000000)
+  ;; 45 - 40 = 5
+  (simple-benchmark [  ] (case (rand-nth [:a :b :c]) :b 5 :c 8 :a 3 0) 1000000)
+  ;; 101 - 40 =60
+  (simple-benchmark [x {"b" 5 "c" 8 "a" 3}] (get x "a") 10000)
+  ;; 9
+
+
+  (simple-benchmark [] (= "a" "b") 100000)
+  ;; 13
+  (simple-benchmark [] (identical? "a" "b") 100000)
+  ;; 1
+  (simple-benchmark [] (case "a" "b" true false) 100000)
+  ;; 1
+
+  (defn some-recur
+    ([f]
+     (fn [i]
+       (if (> i 15)
+         "new state"
+         (f (inc i))))))
+
+  (def stak (apply comp (take 15 (repeat some-recur))))
+  (simple-benchmark[] (comp some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur ) 10000)
+  ;; 40
+
+  (def active (stak identity))
+
+  (simple-benchmark [](active 2) 100000)
+  ;; 16
+
+  (defn try-smth [i]
+    (if (> i 15)
+      "new state"
+      nil))
+
+  (simple-benchmark []
+                    (loop [i 1]
+                      (if (nil? (try-smth i))
+                        (recur (inc i))
+                        "yes")) 100000)
+  ;; 16
+
+  (simple-benchmark [] (let [[a b] [{:a :map} true]]
+                         [a b]) 100000)
+  ;; 23
+
+
+  )
