@@ -57,3 +57,11 @@
 ;; 17
 (simple-benchmark [] (#{ :bobert } :bobert) 100000)
 ;; 20
+
+;; nth vs subvec
+(def long-vec [1 2 3 45 6 7 8 99 0 8 7 6 55 3 3 234 5 6 7 5 4 35 56 47 3 3636 36 36 36])
+(simple-benchmark [] (nth long-vec 10) 10000)
+;; 6
+
+(simple-benchmark [] (subvec long-vec 10) 10000)
+;; 17

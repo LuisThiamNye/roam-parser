@@ -26,18 +26,24 @@
 
 
 (defn find-elements [string]
-  (let [str-length (count string)]
+  (let [str-length (count string)
+        runs       (volatile! 0)]
     (loop [state {:path   [{:context/id       :context/block
                             :open-idx         0
                             :context/elements []
                             :context/rules    rules/rules}]
                   :idx    0
                   :string string}]
-      (let [idx (:idx state)]
-        (if (< idx str-length)
-          (recur (transf/process-char state) )
-          (-> state :path (nth 0) :context/elements
-              #_ (conj (elements/->Text (subs string (-> state :elements peek :end))))))))))
+      (vswap! runs inc)
+      (if (> @runs 100000)
+        (js/console.log "too many recurs")
+        (let [idx (:idx state)]
+          (if (< idx str-length)
+            (recur (transf/process-char state (-> state :path peek :context/rules)) )
+            (let [path (:path state)]
+              (if (< 1 (count path))
+                (recur (transf/fallback-state (peek path)))
+                (-> state :path (nth 0) :context/elements)))))))))
 
 ;;
 ;; **** rich comment block ****
