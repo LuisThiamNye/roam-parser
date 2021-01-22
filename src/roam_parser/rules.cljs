@@ -1,69 +1,96 @@
-(ns roam-parser.rules (:require [clojure.set]))
-
+(ns roam-parser.rules
+  (:require
+   [clojure.string]
+   [roam-parser.transformations :as transf]
+   [roam-parser.elements :as elements]
+   [roam-parser.utils :as utils]))
 
 
 (def escapable-char-regex #"[\\{}\[\]\(\)`\*_\^:#!\n>]|\${2}")
-
 (def codeblock-re (js/RegExp #"^(?:(javascript|css|html|clojure|common lisp)\n|\n?)(.*(?:[^\n]|$))" "s"))
 (def default-codeblock-lang "javascript")
 
-(def style-el-definition (array-map :allowed-children #{:parenthetical :code :page :alias
-                                                        :bold :italic :highlight :url}
-                                    :killed-by #{:image :render :latex}
-                                    :scope :inline))
+;; TODO
+(defn lookahead-contains? [state s]
+  (clojure.string/starts-with? (subs (:string state) (inc (:idx state))) s))
 
-(def -element-definitions {:block (array-map :allowed-children #{:page :render :image :bold :highlight :italic
-                                                                :alias :parenthetical :hr :code :url :latex
-                                                                :bracket-tag :tag :block-ref :codeblock :attribute})
-                          :blockquote (array-map :allowed-children #{:page :render :image :bold :highlight :italic
-                                                                     :alias :parenthetical :hr :code :url :latex
-                                                                     :bracket-tag :tag :block-ref})
-                          :codeblock (array-map)
-                          :code (array-map :killed-by #{:codeblock})
-                          :render (array-map :allowed-children #{:page :block-ref :curly}
-                                             :killed-by #{:codeblock
-                                                          :code}
-                                             :delimiters #{:curly}
-                                             :invisible? :true)
-                          :curly (array-map :allowed-children #{:page :block-ref :curly}
-                                            :killed-by #{:codeblock
-                                                         :code})
-                          :page (array-map :allowed-children #{:page :bold :highlight :italic :alias}
-                                           :delimiters #{:square}
-                                           :scope :inline
-                                           :killed-by #{:image})
-                          :bracket-tag (array-map :allowed-children #{:page :bold :highlight :italic}
-                                                  :delimiters #{:square}
-                                                  :scope :inline
-                                                  :killed-by #{:image :alias})
-                          :alias (array-map :allowed-children #{:latex :code :image
-                                                                :bold :highlight :italic}
-                                            :delimiters #{:square :round})
-                          :image (array-map :allowed-children #{:bold :highlight :italic
-                                                                :image}
-                                            :delimiters #{:square :round})
-                          ;; dummy element; never created
-                          :alias-destination (array-map :allowed-children #{:page :block-ref}
-                                                        :killed-by #{:alias}
-                                                        :scope :inline
-                                                        :invisible? :true)
-                          :parenthetical (array-map :allowed-children #{:code :render :url :latex
-                                                                        :bold :highlight :italic
-                                                                        :page :alias :parenthetical :image
-                                                                        :bracket-tag :tag :block-ref}
-                                                    :killed-by #{:codeblock}
-                                                    :delimiters #{:round})
-                          :latex (array-map :killed-by #{:codeblock})
-                          :bold style-el-definition :italic style-el-definition :highlight style-el-definition
 
-                          ;; singles
+;; Page link
+;;
 
-                          :hr (array-map)
-                          :url (array-map)
-                          :attribute (array-map :allowed-children #{:bold :italic :highlight}
-                                                :killed-by #{:url :latex :block-ref :parenthetical
-                                                             :image :alias :bracket-tag :render :code})
-                          :bracket-attribute (array-map :allowed-children #{:bold :italic :highlight :page}
-                                                        :killed-by #{:image :alias})
-                          ;; tags cannot overlap with other delimiters due to regex
-                          :tag (array-map)})
+(defn terminate-page-link [state char]
+  (when (identical? "]" char)
+    (when (lookahead-contains? state "]")
+      (let [partner (-> state :path peek)
+            idx     (:idx state)]
+        (transf/ctx-to-element (:path state)
+                               (elements/->PageLink
+                                (subs (:string state) (:context/open-idx partner) idx)
+                                (:context/elements partner))
+                               {:context/id :context/page-link
+                                :killed-by? (constantly false) ;; TODO use polymorphism? implement killed-by?
+                                :next-idx   (+ 2 idx)})))))
+
+(defn start-page-link [state char]
+  (when (identical? "[" char)
+    (let [double? (lookahead-contains? state "[" )]
+      (when double?
+        (transf/new-ctx {:context/id        :context/page-link
+                         :context/open-idx  (-> state :idx (+ 2))
+                         :context/elements  []
+                         :context/terminate terminate-page-link})))))
+
+(defn block-ref? [el]
+  ;; TODO
+  )
+
+(defn string-contents [el]
+  ;; TODO
+  )
+
+;; Alias
+;;
+
+(defn terminate-alias-round [state char]
+  (when (identical? ")" char)
+    (let [ctx    (-> state :path peek)
+          [dest-type
+           dest] (or (when (= :context/alias-round (:context/id ctx))
+                       (let [dest-els    (:context/elements ctx)
+                             first-child (first dest-els)]
+                         (cond
+                           (block-ref? first-child)
+                           [:block-ref "TODO"]
+
+                           (instance? elements/PageLink first-child)
+                           [:page (:page-name first-child)])))
+
+                     [:url (string-contents ctx)])]
+      (transf/ctx-to-element (:path state)
+                             (elements/->Alias (:context/elements state) dest-type dest)
+                             {:context/id :context/alias-round
+                              :killed-by? (constantly false) ;; TODO
+                              :next-idx   (-> state :idx inc)}))))
+
+(defn terminate-alias-square [state char]
+  (when (and (identical? "]" char)
+             (lookahead-contains? state "(" ))
+    (transf/swap-ctx (:path state)
+                     {:context/id        :context/alias-round
+                      :context/open-idx  (-> state :idx (+ 2))
+                      :context/elements  []
+                      :context/terminate terminate-alias-round}
+                     {:context/id :context/alias-square
+                      :killed-by? (constantly false) ;; TODO
+                      })))
+
+(defn start-alias-square [state char]
+  (when (identical? "[" char)
+    (let [alias-square {:context/id        :context/alias-square
+                        :context/open-idx  (-> state :idx inc)
+                        :context/elements  []
+                        :context/terminate terminate-alias-square}]
+      (transf/new-ctx alias-square))))
+
+;; processed from end to beginning
+(def rules [start-page-link start-alias-square])

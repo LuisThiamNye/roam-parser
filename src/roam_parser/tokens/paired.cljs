@@ -113,33 +113,11 @@
     (or (if (and (contains? #{:alias :image} (:tag partner)) (= quantity (:length partner)))
 
           ;; make an alias
-          (let [squares (:potential-alias-squares current-state)
+          (let [squares     (:potential-alias-squares current-state)
                 square-pair (some #(when (identical? (:idx partner) (:end %)) %) squares)
                 square-data (:deferred-data square-pair)
-                element-id (:tag partner)
-                [dest-type
-                 dest] (cond
-                         (and (identical? quantity 3) not-empty)
-                         [:block-ref (builder/get-sub (:block-string parser-parameters) inner-start inner-end :no-escape)]
-
-                         (and (identical? quantity 1)
-                              (or not-empty (= :alias (:tag partner))))
-                         (let [virtual-dest (elements/map->AliasDestinationVirtual
-                                             {:children-start inner-start
-                                              :children-end inner-end})
-                               children (:children (builder/process-children
-                                                    (assoc parser-parameters
-                                                           :el-type-allowed? #(contains? (elements/allowed-children virtual-dest)
-                                                                                         %)
-                                                           :tokens (builder/find-children-tokens (:tokens parser-parameters) inner-start inner-end)
-                                                           :parent virtual-dest)))
-                               first-child (first children)]
-                           (if (and (identical? 1 (count children))
-                                    (instance? elements/PageLink first-child)
-                                    (= inner-start (:start first-child))
-                                    (= inner-end (:end first-child)))
-                             [:page (:page-name first-child)]
-                             [:url (builder/get-sub (:block-string parser-parameters) inner-start inner-end)])))]
+                element-id  (:tag partner)
+                ]
             (when dest-type
               (builder/add-element-with-children current-state
                                                  (cond-> {:start (cond-> (:start square-pair)
@@ -159,7 +137,7 @@
           (when not-empty
             (if (> quantity 1)
               (add-bracket-element-with-children current-state (-> {:start start-idx
-                                                                    :end end-idx}
+                                                                    :end   end-idx}
                                                                    (elements/map->Parenthetical)))
 
               ;;  a normal pair of ( ) brackets, discard and surface children as an isolated bunch

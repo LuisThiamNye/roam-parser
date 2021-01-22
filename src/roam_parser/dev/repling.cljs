@@ -47,3 +47,13 @@
 
 (/ (transduce (map count) + lines) (count lines))
 ;; => 77.21255612167684
+
+(simple-benchmark [] (= :bobert :bobette) 100000)
+;; 16
+(simple-benchmark [] (#{ :bobert } :bobette) 100000)
+;; 17
+
+(simple-benchmark [] (= :bobert :bobert) 100000)
+;; 17
+(simple-benchmark [] (#{ :bobert } :bobert) 100000)
+;; 20
