@@ -49,28 +49,30 @@
                           (conj el)))
                (assoc :context/last-idx next-idx)))))
 
-(defn new-ctx [ctx]
-  (fn [state get-fallbacks]
-    (-> state
-        (update :path conj
-                (-> ctx
-                    (assoc  :context/rules
-                            (conj (-> state :path peek :context/rules)
-                                  (:context/terminate ctx)))
-                    (assoc :state state)
-                    (assoc :context/start-idx (:idx state))
-                    (assoc :context/fallback-rules (get-fallbacks))))
-        (assoc :idx (:context/open-idx ctx)))))
+(defn new-ctx [ctx state]
+  (when (or (contains? (-> state :path peek :context/allowed-ctxs) (:context/id ctx))
+            (contains? (-> state :path peek :context/killed-by) (:context/id ctx)))
+    (fn [state get-fallbacks]
+      (-> state
+          (update :path conj
+                  (-> ctx
+                      (assoc  :context/rules
+                              (conj (-> state :path peek :context/rules)
+                                    (:context/terminate ctx)))
+                      (assoc :state state)
+                      (assoc :context/start-idx (:idx state))
+                      (assoc :context/fallback-rules (get-fallbacks))))
+          (assoc :idx (:context/open-idx ctx))))))
 
 (defn matches-ctx? [ctx id]
   (= id (:context/id ctx)))
 
-(defn try-match-ctx [state-fn path ctx-id killed-by?]
+(defn try-match-ctx [state-fn path closer-ctx-id killed-by]
   (let [last-index (dec (count path))]
     (loop [i last-index]
       (when-not (neg? i)
         (let [this-ctx (nth path i)]
-          (if (matches-ctx? this-ctx ctx-id)
+          (if (matches-ctx? this-ctx closer-ctx-id)
             (if (= i last-index)
               ;; add the element
               (if (:context/exclude-text? this-ctx)
@@ -85,7 +87,7 @@
               (let [failed-context (nth path (inc i))]
                 (fn [_ _]
                   (fallback-state failed-context))))
-            (when-not (killed-by? this-ctx)
+            (when-not (contains? killed-by (:context/id this-ctx))
               (recur (dec i)))))))))
 
 (defn ctx-to-element [path make-el closer-data]
@@ -101,7 +103,7 @@
                                  (add-element (make-el ctx)
                                               state (:context/start-idx ctx) next-idx)))
                 (assoc :idx next-idx)))))
-      (try-match-ctx path (:context/id closer-data) (:killed-by? closer-data))))
+      (try-match-ctx path (:context/id closer-data) (:killed-by closer-data))))
 
 (defn new-single-element [el next-idx]
   (fn [state _]
@@ -126,4 +128,4 @@
                                       (assoc :context/fallback-rules (get-fallbacks))
                                       (assoc :context/replaced-ctx old-ctx)))))
            (assoc :idx (:context/open-idx new-ctx)))))
-   path (:context/id token-data) (:killed-by? token-data)))
+   path (:context/id token-data) (:killed-by token-data)))

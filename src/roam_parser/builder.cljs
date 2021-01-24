@@ -19,9 +19,11 @@
 (defn find-elements [string]
   (let [str-length (count string)
         runs       (volatile! 0)]
-    (loop [state {:path   [{:context/id       :context/block
+    (loop [state {:path   [{:context/id       :context.id/block
                             :open-idx         0
                             :context/elements []
+                            :context/allowed-ctxs (rules/allowed-ctxs :context.id/block)
+                            :context/killed-by #{}
                             :context/rules    rules/rules}]
                   :idx    0
                   :string string}]
@@ -41,10 +43,11 @@
 ;; **** rich comment block ****
 ;;
 
+#_{:clj-kondo/ignore [:redefined-var]}
 (comment
-  (find-elements "[[[[a]]d[[b]]]]hhlolol")
   (simple-benchmark []   (find-elements "[[[[a]]d[[b]]]]hhlolol") 10000)
 
+  (find-elements "[[[[a]]d[[b]]]]hhlolol")
 
 
   ;; bracket run length lookahead
@@ -58,7 +61,7 @@
     (loop [n n-doubles
            s state]))
 
-  (simple-benchmark [] {:context/id       :context/alias-square
+  (simple-benchmark [] {:context/id       :context.id/alias-square
                         :open-idx         (inc 54)
                         :context/elements []} 10000)
   ;; 7
