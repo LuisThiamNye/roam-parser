@@ -5,16 +5,7 @@
 
 (defn probe [x] (.log js/console x) x)
 
-(def str-replace-re (js/RegExp. (str "\\\\(?<escape>" (utils/re-to-str rules/escapable-char-regex) ")")
-                                "g"))
-(defn escape-str [^string string] (.replace string str-replace-re "$<escape>"))
 
-(defn get-sub
-  ([^string string start end no-escape]
-   (subs string start end))
-  ([^string string start end]
-   (-> (subs string start end)
-       escape-str)))
 
 (defn get-match [^string string re start end]
   (re-find re (subs string start end)))
@@ -39,11 +30,12 @@
         (js/console.log "too many recurs")
         (let [idx (:idx state)]
           (if (< idx str-length)
-            (recur (transf/process-char state (-> state :path peek :context/rules)) )
+            (recur (transf/process-char state (-> state :path peek :context/rules)))
             (let [path (:path state)]
               (if (< 1 (count path))
                 (recur (transf/fallback-state (peek path)))
-                (-> state :path (nth 0) :context/elements)))))))))
+                (-> state :path (nth 0) :context/elements
+                    (transf/conj-text-el string (-> state :path (nth 0)) str-length))))))))))
 
 ;;
 ;; **** rich comment block ****
@@ -57,14 +49,14 @@
 
   ;; bracket run length lookahead
   ;; probably better to not as assumption works better
+
+
   #_:clj-kondo/ignore
   (let [char-count (count (re-find #"\[*" (subs string idx)))
         n-doubles  (quot char-count 2)
         a-single?  (pos? (mod char-count 2))]
     (loop [n n-doubles
-           s state]
-      ))
-
+           s state]))
 
   (simple-benchmark [] {:context/id       :context/alias-square
                         :open-idx         (inc 54)
@@ -73,9 +65,9 @@
 
   (simple-benchmark [] (rand-nth ["a" "b" "c"]) 1000000)
   ;; 40
-  (simple-benchmark [  ] (case (rand-nth ["a" "b" "c"]) "b" 5 "c" 8 "a" 3 0) 1000000)
+  (simple-benchmark [] (case (rand-nth ["a" "b" "c"]) "b" 5 "c" 8 "a" 3 0) 1000000)
   ;; 45 - 40 = 5
-  (simple-benchmark [  ] (case (rand-nth [:a :b :c]) :b 5 :c 8 :a 3 0) 1000000)
+  (simple-benchmark [] (case (rand-nth [:a :b :c]) :b 5 :c 8 :a 3 0) 1000000)
   ;; 101 - 40 =60
   (simple-benchmark [x {"b" 5 "c" 8 "a" 3}] (get x "a") 10000)
   ;; 9
@@ -96,12 +88,12 @@
          (f (inc i))))))
 
   (def stak (apply comp (take 15 (repeat some-recur))))
-  (simple-benchmark[] (comp some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur ) 10000)
+  (simple-benchmark [] (comp some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur some-recur) 10000)
   ;; 40
 
   (def active (stak identity))
 
-  (simple-benchmark [](active 2) 100000)
+  (simple-benchmark [] (active 2) 100000)
   ;; 16
 
   (defn try-smth [i]
@@ -127,4 +119,18 @@
 
   (simple-benchmark [] (pos? (count path)) 100000)
   ;; 3
+
+  (def str-ex "the somethign that happened the other day is reallly troubling me and my faamilay ow aiohofpdd")
+  (simple-benchmark [] (conj [] {:x (subs str-ex 10 30)}) (* 1000 7))
+  ;; 7
+
+  ;; additional time going back over element coll for text nodes
+  (def ex-el [{} {} {} {} {} {} {}])
+  (simple-benchmark [] (loop [i 6]
+                         (if (neg? i)
+                           nil
+                           (do
+                             (nth ex-el i)
+                             (recur (dec i))))) 1000)
+  ;; 4
   )
