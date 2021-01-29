@@ -126,6 +126,13 @@
   (stringify [_]
     (str "((" (stringify-children children) "))")))
 
+(defrecord BlockRef [block-uid]
+  ElementProtocol
+  (allowed-children [_] #{})
+  (killed-by [_] #{Codeblock})
+  (stringify [_]
+    (str "((" block-uid "))")))
+
 (defrecord Formatting [format-type children]
   ElementProtocol
   (allowed-children [_] #{Parenthetical Code PageLink Alias

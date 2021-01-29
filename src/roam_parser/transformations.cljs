@@ -49,20 +49,23 @@
                           (conj el)))
                (assoc :context/last-idx next-idx)))))
 
-(defn new-ctx [ctx state]
+(defn start-new-ctx [ctx]
+  (fn [state get-fallbacks]
+    (-> state
+        (update :path conj
+                (-> ctx
+                    (assoc  :context/rules
+                            (conj (-> state :path peek :context/rules)
+                                  (:context/terminate ctx)))
+                    (assoc :state state)
+                    (assoc :context/start-idx (:idx state))
+                    (assoc :context/fallback-rules (get-fallbacks))))
+        (assoc :idx (:context/open-idx ctx)))))
+
+(defn try-new-ctx [ctx state]
   (when (or (contains? (-> state :path peek :context/allowed-ctxs) (:context/id ctx))
             (contains? (-> state :path peek :context/killed-by) (:context/id ctx)))
-    (fn [state get-fallbacks]
-      (-> state
-          (update :path conj
-                  (-> ctx
-                      (assoc  :context/rules
-                              (conj (-> state :path peek :context/rules)
-                                    (:context/terminate ctx)))
-                      (assoc :state state)
-                      (assoc :context/start-idx (:idx state))
-                      (assoc :context/fallback-rules (get-fallbacks))))
-          (assoc :idx (:context/open-idx ctx))))))
+    (start-new-ctx ctx)))
 
 (defn matches-ctx? [ctx id]
   (= id (:context/id ctx)))
@@ -105,12 +108,18 @@
                 (assoc :idx next-idx)))))
       (try-match-ctx path (:context/id closer-data) (:killed-by closer-data))))
 
+(defn close-ctx [closer-length]
+  (fn [state _]
+    (-> state
+        (update :path pop)
+        (update :idx + closer-length))))
+
 (defn new-single-element [el next-idx]
   (fn [state _]
     (-> state
         (update :path add-element el state (-> state peek :context/start-idx) next-idx)
         (assoc :idx next-idx))))
-;; TODO find in-betweens
+
 (defn swap-ctx [path new-ctx token-data]
   (try-match-ctx
    (fn [state get-fallbacks]
