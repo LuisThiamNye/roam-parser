@@ -1,6 +1,7 @@
 (ns roam-parser.transformations
   (:require
-   [roam-parser.utils :as utils]))
+   [roam-parser.utils :as utils]
+   [taoensso.timbre :as t]))
 
 (defn process-char [state state-actions]
   (let [char (nth (:string state) (:idx state))]
@@ -8,13 +9,17 @@
       (if (neg? i)
         (update state :idx inc)
         ;; TODO what is the point of returning a function when it can just simply return the transformed state?
-        (if-some [transform-state ((nth state-actions i) state char)]
-          (transform-state state #(subvec state-actions 0 i))
-          (recur (dec i)))))))
+        (let [action-fn (nth state-actions i)]
+          (if-some [transform-state (action-fn state char)]
+            (transform-state state #(subvec state-actions 0 i))
+            (recur (dec i))))))))
 
 ;; TODO
 (defn state-fallback [state]
   (process-char (:last-state state) (:fallback-rules state)))
+
+(defn fallback-from-ctx [ctx]
+  (process-char (:state ctx) (:fallback-rules ctx)))
 
 (defn parent-killed-by? [ctx killer-ctx]
   (contains? (:context/killed-by ctx) (:context/id killer-ctx)))
@@ -39,28 +44,33 @@
 (defn add-element [path el state el-start-idx next-idx]
   (let [ctx-n   (dec (count path))
         ctx     (peek path)
-        ctx-els (:context/elements ctx)]
+        ctx-els (:context/elements ctx)
+        new-el (-> ctx-els
+                   (cond->
+                    (not (:context/exclude-text? ctx))
+                     (conj-text-el (:string state) ctx el-start-idx))
+                   (conj el))]
+    (t/debug "FORM ELEMENT" new-el)
     (assoc path ctx-n
            (-> ctx
-               (assoc :context/elements
-                      (-> (cond-> ctx-els
-                            (not (:context/exclude-text? ctx))
-                            (conj-text-el (:string state) ctx el-start-idx))
-                          (conj el)))
+               (assoc :context/elements new-el)
                (assoc :context/last-idx next-idx)))))
 
 (defn start-new-ctx [ctx]
   (fn [state get-fallbacks]
-    (-> state
-        (update :path conj
-                (-> ctx
-                    (assoc  :context/rules
-                            (conj (-> state :path peek :context/rules)
-                                  (:context/terminate ctx)))
-                    (assoc :state state)))
-        (assoc :last-state state)
-        (assoc :fallback-rules (get-fallbacks))
-        (assoc :idx (:context/open-idx ctx)))))
+    (let [new-ctx (-> ctx
+                      (assoc  :context/rules
+                              (conj (-> state :path peek :context/rules)
+                                    (:context/terminate ctx)))
+                      (assoc :context/start-idx (:idx state))
+                      (assoc :state state)
+                      (assoc :fallback-rules (get-fallbacks)))]
+      (t/debug "START NEW CTX\n" new-ctx)
+      (-> state
+          (update :path conj new-ctx)
+          (assoc :last-state state)
+          (assoc :fallback-rules (get-fallbacks))
+          (assoc :idx (:context/open-idx ctx))))))
 
 (defn try-new-ctx [ctx state]
   (when (or (contains? (-> state :path peek :context/allowed-ctxs) (:context/id ctx))
@@ -87,8 +97,9 @@
                                 (conj-text-el els (:string state) this-ctx (:idx state))))
                    get-fallback)))
               ;; in-between
-              (fn [state _]
-                  (state-fallback state)))
+              (fn [_ _]
+                (t/debug "OVERLAP BACKTRACK - unclosed ctx in the way of termination. Falling back from\n" this-ctx)
+                (fallback-from-ctx this-ctx)))
             (when-not (contains? killed-by (:context/id this-ctx))
               (recur (dec i)))))))))
 
@@ -98,7 +109,8 @@
               ctx        (-> state :path peek)
               next-idx   (:next-idx closer-data)]
           (if (parent-killed-by? parent-ctx ctx)
-            (state-fallback state)
+            (do (t/debug "CTX KILLED by parent when CLOSING - parent, child:\n" parent-ctx ctx)
+                (fallback-from-ctx parent-ctx))
             (-> state
                 (assoc :path (-> (:path state)
                                  pop
@@ -107,8 +119,13 @@
                 (assoc :idx next-idx)))))
       (try-match-ctx path (:context/id closer-data) (:killed-by closer-data))))
 
-(defn close-ctx [closer-length]
+(defn replace-last [coll new]
+  (assoc coll (-> coll count dec) new))
+
+(defn clear-ctx
+  [closer-length]
   (fn [state _]
+    (t/debug "CLEAR CTX" (-> state :path peek))
     (-> state
         (update :path pop)
         (update :idx + closer-length))))
@@ -123,6 +140,7 @@
   (try-match-ctx
    (fn [state get-fallbacks]
      (let [old-ctx (-> state :path peek)]
+       (t/debug "SWAP ctx" old-ctx "\nto (partial)" new-ctx)
        (-> state
            (update :path (fn [path]
                            (assoc path (dec (count path))
@@ -137,3 +155,16 @@
                                       (assoc :context/replaced-ctx old-ctx)))))
            (assoc :idx (:context/open-idx new-ctx)))))
    path (:context/id token-data) (:killed-by token-data)))
+
+(comment
+  (def x [1 2 3 4 5 6 78 95 {:somethig 4} {4 4}])
+
+  (simple-benchmark [] (-> x pop pop (conj {:a :b})) 10000)
+;; 13
+  (simple-benchmark [] (-> x pop (assoc (dec (count x)) {:a :b})) 10000)
+  ;; 10
+
+  (def path [{:c/a [4]}])
+  (-> path peek :c/a)
+;;
+  )

@@ -290,7 +290,7 @@
 (defn terminate-text-bracket-fn [close-char]
   (fn [_ char]
     (when (identical? close-char char)
-      (transf/close-ctx 1))))
+      (transf/clear-ctx 1))))
 
 (defn start-text-bracket-fn [id open-char close-char]
   (fn [state char]
@@ -298,7 +298,9 @@
       (transf/start-new-ctx {:context/id id
                              :context/open-idx (-> state :idx inc)
                              :context/elements []
-                             :context/killed-by block-ctxs
+;; TODO better solution
+                             :context/killed-by (into block-ctxs #{:context.id/alias-round
+                                                                   :context.id/image-round})
                              :context/allowed-ctxs (-> state :path peek :context/allowed-ctxs)
                              :context/terminate (terminate-text-bracket-fn close-char)}))))
 

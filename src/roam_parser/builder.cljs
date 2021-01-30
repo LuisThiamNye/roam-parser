@@ -1,4 +1,5 @@
 (ns roam-parser.builder (:require [clojure.string]
+                                  [taoensso.timbre :as t]
                                   [roam-parser.utils :as utils]
                                   [roam-parser.rules :as rules]
                                   [roam-parser.transformations :as transf]))
@@ -35,7 +36,8 @@
             (recur (transf/process-char state (-> state :path peek :context/rules)))
             (let [path (:path state)]
               (if (< 1 (count path))
-                (recur (transf/state-fallback state))
+                (do (t/debug "UNCLOSED AT EOL" (-> state :path peek))
+                (recur (transf/state-fallback state)))
                 (-> state :path (nth 0) :context/elements
                     (transf/conj-text-el string (-> state :path (nth 0)) str-length))))))))))
 

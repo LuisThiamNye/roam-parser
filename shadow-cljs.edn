@@ -3,7 +3,8 @@
 
  :dependencies [[cider/cider-nrepl "0.25.5"]
                 [binaryage/devtools "1.0.2"]
-                [devcards "0.2.7"]]
+                [devcards "0.2.7"]
+                [com.taoensso/timbre "5.1.0"]]
 
  :builds {:dev {:target           :browser
                 :asset-path       "js"
@@ -16,4 +17,5 @@
                                    :devcards true}
                 :devtools         {:http-port 8021
                                    :http-root "resources/public"
-                                   :preloads  [shadow.remote.runtime.cljs.browser]}}}}
+                                   :preloads  [shadow.remote.runtime.cljs.browser
+                                               roam-parser.dev.preload]}}}}
