@@ -35,7 +35,7 @@
             (recur (transf/process-char state (-> state :path peek :context/rules)))
             (let [path (:path state)]
               (if (< 1 (count path))
-                (recur (transf/fallback-state (peek path)))
+                (recur (transf/state-fallback state))
                 (-> state :path (nth 0) :context/elements
                     (transf/conj-text-el string (-> state :path (nth 0)) str-length))))))))))
 

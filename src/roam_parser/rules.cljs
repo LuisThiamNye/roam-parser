@@ -294,16 +294,13 @@
 
 (defn start-text-bracket-fn [id open-char close-char]
   (fn [state char]
-    (cond (identical? open-char char)
-          (transf/start-new-ctx {:context/id id
-                                 :context/open-idx (-> state :idx inc)
-                                 :context/elements []
-                                 :context/killed-by block-ctxs
-                                 :context/allowed-ctxs (-> state :path peek :context/allowed-ctxs)
-                                 :context/terminate (constantly nil)})
-          (and (identical? char close-char)
-               (-> state :path peek :context/id #{id}))
-          (transf/close-ctx 1))))
+    (when (identical? open-char char)
+      (transf/start-new-ctx {:context/id id
+                             :context/open-idx (-> state :idx inc)
+                             :context/elements []
+                             :context/killed-by block-ctxs
+                             :context/allowed-ctxs (-> state :path peek :context/allowed-ctxs)
+                             :context/terminate (terminate-text-bracket-fn close-char)}))))
 
 ;; processed from end to beginning. Order of descending priority
 (def rules [skip-escape-char

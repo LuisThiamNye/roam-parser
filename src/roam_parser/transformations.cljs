@@ -13,8 +13,8 @@
           (recur (dec i)))))))
 
 ;; TODO
-(defn fallback-state [ctx]
-  (process-char (:state ctx) (:context/fallback-rules ctx)))
+(defn state-fallback [state]
+  (process-char (:last-state state) (:fallback-rules state)))
 
 (defn parent-killed-by? [ctx killer-ctx]
   (contains? (:context/killed-by ctx) (:context/id killer-ctx)))
@@ -57,9 +57,9 @@
                     (assoc  :context/rules
                             (conj (-> state :path peek :context/rules)
                                   (:context/terminate ctx)))
-                    (assoc :state state)
-                    (assoc :context/start-idx (:idx state))
-                    (assoc :context/fallback-rules (get-fallbacks))))
+                    (assoc :state state)))
+        (assoc :last-state state)
+        (assoc :fallback-rules (get-fallbacks))
         (assoc :idx (:context/open-idx ctx)))))
 
 (defn try-new-ctx [ctx state]
@@ -87,9 +87,8 @@
                                 (conj-text-el els (:string state) this-ctx (:idx state))))
                    get-fallback)))
               ;; in-between
-              (let [failed-context (nth path (inc i))]
-                (fn [_ _]
-                  (fallback-state failed-context))))
+              (fn [state _]
+                  (state-fallback state)))
             (when-not (contains? killed-by (:context/id this-ctx))
               (recur (dec i)))))))))
 
@@ -99,7 +98,7 @@
               ctx        (-> state :path peek)
               next-idx   (:next-idx closer-data)]
           (if (parent-killed-by? parent-ctx ctx)
-            (fallback-state parent-ctx)
+            (state-fallback state)
             (-> state
                 (assoc :path (-> (:path state)
                                  pop
