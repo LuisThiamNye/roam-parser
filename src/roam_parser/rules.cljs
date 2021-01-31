@@ -1,6 +1,7 @@
 (ns roam-parser.rules
   (:require
    [clojure.string]
+   [taoensso.timbre :as t]
    [roam-parser.transformations :as transf]
    [roam-parser.elements :as elements]
    [roam-parser.utils :as utils]))
@@ -186,17 +187,16 @@
                              (case round-id
                                :context.id/alias-round
                                (fn [ctx]
-                                 (let [[dest-type
-                                        dest] (or (let [dest-els    (:context/elements ctx)
-                                                        first-child (first dest-els)]
-                                                    (cond
-                                                     (instance? elements/BlockRef first-child)
-                                                      [:block-ref (:block-uid first-child)]
+                                 (let [dest-els    (:context/elements ctx)
+                                       first-child (first dest-els)
+                                       [dest-type
+                                        dest]      (or (cond (instance? elements/BlockRef first-child)
+                                                             [:block-ref (:block-uid first-child)]
 
-                                                      (instance? elements/PageLink first-child)
-                                                      [:page (:page-name first-child)]))
+                                                             (instance? elements/PageLink first-child)
+                                                             [:page (:page-name first-child)])
 
-                                                  [:url (string-contents ctx state)])]
+                                                       [:url (string-contents ctx state)])]
                                    (elements/->Alias (:context/elements (:context/replaced-ctx ctx)) dest-type dest)))
 
                                :context.id/image-round
@@ -287,27 +287,37 @@
 ;; standard text [] and () used for balancing
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn terminate-text-bracket-fn [close-char]
+(defn update-last-ctx [state f]
+  (update state :path (fn [path]
+                       (update path (dec (count path)) f))))
+
+(defn terminate-text-bracket-fn [close-char n]
   (fn [_ char]
     (when (identical? close-char char)
-      (transf/clear-ctx 1))))
+      (t/debug "CLOSE simple" char)
+      (fn [state _]
+        (-> state
+            (update :idx inc)
+            (update-last-ctx (fn [ctx]
+                               (assoc-in ctx [:context/rules n] (constantly nil)))))))))
 
-(defn start-text-bracket-fn [id open-char close-char]
-  (fn [state char]
+(defn start-text-bracket-fn [open-char close-char]
+  (fn [_ char]
     (when (identical? open-char char)
-      (transf/start-new-ctx {:context/id id
-                             :context/open-idx (-> state :idx inc)
-                             :context/elements []
-;; TODO better solution
-                             :context/killed-by (into block-ctxs #{:context.id/alias-round
-                                                                   :context.id/image-round})
-                             :context/allowed-ctxs (-> state :path peek :context/allowed-ctxs)
-                             :context/terminate (terminate-text-bracket-fn close-char)}))))
+      (fn [state _]
+        (t/debug "START simple" char)
+        (-> state
+            (update :idx inc)
+            (assoc :last-state state)
+            (assoc :fallback-rules [])
+            (update-last-ctx (fn [ctx]
+                               (update ctx :context/rules
+                                       #(conj %  (terminate-text-bracket-fn close-char (count %)))))))))))
 
 ;; processed from end to beginning. Order of descending priority
 (def rules [skip-escape-char
-            (start-text-bracket-fn :context.id/square "[" "]")
-            (start-text-bracket-fn :context.id/round "(" ")")
+            (start-text-bracket-fn  "[" "]")
+            (start-text-bracket-fn  "(" ")")
             start-formatting
             start-page-link
             start-image-square
