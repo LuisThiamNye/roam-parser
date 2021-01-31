@@ -1,6 +1,7 @@
 (ns roam-parser.transformations
   (:require
    [roam-parser.utils :as utils]
+   [roam-parser.state :refer [get-sub]]
    [taoensso.timbre :as t]))
 
 (defn process-char [state state-actions]
@@ -16,6 +17,10 @@
 
 
 (defn fallback-from-ctx [ctx]
+  (if-some [terminate-fallback (:terminate-fallback ctx)]
+    (terminate-fallback)
+    (process-char (:state ctx) (:fallback-rules ctx))))
+(defn fallback-from-open [ctx]
   (process-char (:state ctx) (:fallback-rules ctx)))
 
 (defn parent-killed-by? [ctx killer-ctx]
@@ -26,17 +31,13 @@
                                 "g"))
 (defn escape-str [^string string] (.replace string str-replace-re "$<escape>"))
 
-(defn get-sub
-  ([^string string start end no-escape]
-   (subs string start end))
-  ([^string string start end]
-   (-> (subs string start end)
-       escape-str)))
 
 (defn conj-text-el [els string ctx end-idx]
-  (conj els (get-sub string
-                     (or (:context/last-idx ctx) (:context/open-idx ctx))
-                     end-idx)))
+  (let [text (get-sub string
+                      (or (:context/last-idx ctx) (:context/open-idx ctx))
+                      end-idx)]
+    (cond-> els
+      (not (identical? "" text)) (conj text))))
 
 (defn add-element [path el state el-start-idx next-idx]
   (let [ctx-n   (dec (count path))
@@ -161,5 +162,19 @@
 
   (def path [{:c/a [4]}])
   (-> path peek :c/a)
-;;
+  (require 'clojure.string)
+  (simple-benchmark [] (= "" "") 100000)
+;; 9
+  (simple-benchmark [] (identical? "" "") 100000)
+;; 0
+
+  (simple-benchmark [] (when-let [x nil] true) 100000)
+;; 2
+  (simple-benchmark [] (when-some [x nil] true) 100000)
+;; 1
+  (simple-benchmark [] (when (fn? nil) true) 100000)
+  ;; 7
+
+;; =======
+  ;;
   )
