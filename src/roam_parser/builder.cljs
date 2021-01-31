@@ -37,7 +37,7 @@
             (let [path (:path state)]
               (if (< 1 (count path))
                 (do (t/debug "UNCLOSED AT EOL" (-> state :path peek))
-                (recur (transf/state-fallback state)))
+                    (recur (transf/fallback-from-ctx (-> state :path peek))))
                 (-> state :path (nth 0) :context/elements
                     (transf/conj-text-el string (-> state :path (nth 0)) str-length))))))))))
 

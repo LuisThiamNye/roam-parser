@@ -308,11 +308,12 @@
         (t/debug "START simple" char)
         (-> state
             (update :idx inc)
-            (assoc :last-state state)
-            (assoc :fallback-rules [])
             (update-last-ctx (fn [ctx]
-                               (update ctx :context/rules
-                                       #(conj %  (terminate-text-bracket-fn close-char (count %)))))))))))
+                               (-> ctx
+                                   (update :context/rules
+                                          #(conj %  (terminate-text-bracket-fn close-char (count %))))
+                                  (assoc :state state)
+                                  (assoc :fallback-rules [])))))))))
 
 ;; processed from end to beginning. Order of descending priority
 (def rules [skip-escape-char

@@ -14,9 +14,6 @@
             (transform-state state #(subvec state-actions 0 i))
             (recur (dec i))))))))
 
-;; TODO
-(defn state-fallback [state]
-  (process-char (:last-state state) (:fallback-rules state)))
 
 (defn fallback-from-ctx [ctx]
   (process-char (:state ctx) (:fallback-rules ctx)))
@@ -68,8 +65,6 @@
       (t/debug "START NEW CTX\n" new-ctx)
       (-> state
           (update :path conj new-ctx)
-          (assoc :last-state state)
-          (assoc :fallback-rules (get-fallbacks))
           (assoc :idx (:context/open-idx ctx))))))
 
 (defn try-new-ctx [ctx state]
