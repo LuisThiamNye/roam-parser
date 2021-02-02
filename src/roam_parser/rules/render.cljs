@@ -1,6 +1,11 @@
 (ns roam-parser.rules.render
   (:require
-   [roam-parser.rules.relationships :refer [allowed-ctxs killed-by-of]]))
+   [clojure.string]
+   [roam-parser.rules.relationships :refer [allowed-ctxs killed-by-of]]
+   [roam-parser.rules.text-bracket :refer [start-text-bracket-fn]]
+   [roam-parser.state :refer [lookahead-contains? get-sub]]
+   [roam-parser.elements :as elements]
+   [roam-parser.transformations :as transf]))
 
 (defn terminate-render [state char]
   (when (identical? "}" char)
@@ -21,7 +26,7 @@
         els (:context/elements ctx)
         last-el (peek els)]
     (case (count els)
-      0 (let [render-id (transf/get-sub (:string state) (:context/open-idx ctx) (:idx state))]
+      0 (let [render-id (get-sub (:string state) (:context/open-idx ctx) (:idx state))]
           (when-not (clojure.string/blank? render-id)
             [false render-id]))
       1 (when (-> ctx :context/last-idx (identical? (:idx state)))

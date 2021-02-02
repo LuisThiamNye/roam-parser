@@ -1,7 +1,8 @@
 (ns roam-parser.builder (:require [clojure.string]
                                   [taoensso.timbre :as t]
                                   [roam-parser.utils :as utils]
-                                  [roam-parser.rules :as rules]
+                                  [roam-parser.rules.relationships :refer [allowed-ctxs]]
+                                  [roam-parser.rules :refer [rules]]
                                   [roam-parser.transformations :as transf]))
 
 (defn probe [x] (.log js/console x) x)
@@ -23,9 +24,9 @@
     (loop [state {:path   [{:context/id       :context.id/block
                             :open-idx         0
                             :context/elements []
-                            :context/allowed-ctxs (rules/allowed-ctxs :context.id/block)
+                            :context/allowed-ctxs (allowed-ctxs :context.id/block)
                             :context/killed-by #{}
-                            :context/rules    rules/rules}]
+                            :context/rules    rules}]
                   :idx    0
                   :string string}]
       (vswap! runs inc)
@@ -34,10 +35,11 @@
         (let [idx (:idx state)]
           (if (< idx str-length)
             (recur (transf/process-char state (-> state :path peek :context/rules)))
+            ;; end of block
             (let [path (:path state)]
               (if (< 1 (count path))
                 (do (t/debug "UNCLOSED AT EOL" (-> state :path peek))
-                    (recur (transf/fallback-from-ctx (-> state :path peek))))
+                    (recur (transf/fallback-from-last state)))
                 (-> state :path (nth 0) :context/elements
                     (transf/conj-text-el string (-> state :path (nth 0)) str-length))))))))))
 

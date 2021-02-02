@@ -2,6 +2,8 @@
   (:require
    [roam-parser.rules.relationships :refer [allowed-ctxs killed-by-of]]
    [roam-parser.rules.text-bracket :refer [start-text-bracket-fn]]
+   [roam-parser.transformations :as transf]
+   [roam-parser.elements :as elements]
    [roam-parser.state :refer [lookahead-contains?]]))
 
 (defn terminate-page-link [state char]

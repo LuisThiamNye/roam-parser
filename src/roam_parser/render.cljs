@@ -3,6 +3,7 @@
                                  [roam-parser.elements :as elements :refer [ElementProtocol Codeblock Code PageLink]]
                                  [roam-parser.builder :as builder]
                                  [roam-parser.utils :as utils]
+                                 [roam-parser.rules.relationships :refer [killed-by-of allowed-ctxs]]
                                  [roam-parser.tokens.token :refer []]))
 
 (def el-type-allowed?-textual (fn [_] false))

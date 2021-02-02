@@ -1,6 +1,8 @@
 (ns roam-parser.rules.alias
   (:require
    [roam-parser.rules.relationships :refer [allowed-ctxs killed-by-of]]
+   [roam-parser.elements :as elements]
+   [roam-parser.transformations :as transf]
    [roam-parser.rules.text-bracket :refer [start-text-bracket-fn]]
    [roam-parser.state :refer [lookahead-contains? string-contents]]))
 

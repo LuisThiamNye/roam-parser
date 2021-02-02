@@ -26,7 +26,7 @@
   (allowed-children [_])
   (killed-by [_])
   (stringify [_]
-    (str ":hiccup " content)))
+    (str ":hiccup" content)))
 
 
 
@@ -145,7 +145,8 @@
     (let [delimiter (case format-type
                       :format-type/bold "**"
                       :format-type/italic "__"
-                      :format-type/highlight "^^")]
+                      :format-type/highlight "^^"
+                      :format-type/strikethrough "~~")]
       (str delimiter (stringify-children children) delimiter))))
 
 (defrecord Attribute [brackets? ^string page-name children]
@@ -167,6 +168,12 @@
   (allowed-children [_])
   (killed-by [_])
   (stringify [_] content))
+
+(extend-type string
+  ElementProtocol
+  (allowed-children [_])
+  (killed-by [_])
+  (stringify [s] s))
 
 (defrecord Square [children]
   ElementProtocol
@@ -207,7 +214,7 @@
                           BracketTag Tag})
   (killed-by [_])
   (stringify [_]
-    (str (case link-type :page "[[>]] " :tag "#[[>]] " "> ") (stringify-children children))))
+    (str (case link-type :link-type/page "[[>]] " :link-type/tag "#[[>]] " "> ") (stringify-children children))))
 
 (defrecord Block [children]
   ElementProtocol
@@ -217,3 +224,7 @@
   (killed-by [_])
   (stringify [_]
     (stringify-children children)))
+
+(extend-type PersistentVector
+  ElementProtocol
+  (stringify [v] (stringify-children v)))

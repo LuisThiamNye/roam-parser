@@ -6,6 +6,7 @@
    [roam-parser.elements :as elements]
    [roam-parser.utils :as utils]
    [roam-parser.rules.page :refer [start-page-link]]
+   [roam-parser.rules.block-beginning :refer [block-beginning-rules]]
    [roam-parser.rules.alias :refer [start-alias-square start-image-square]]
    [roam-parser.rules.render :refer [start-render]]
    [roam-parser.rules.formatting :refer [start-formatting]]))
@@ -24,9 +25,6 @@
 
 
 
-
-
-
 (defn text-rules [state char]
   (let [rules (-> state :path peek :context/text-rules)]
     (loop [i (dec (count rules))]
@@ -41,7 +39,8 @@
             start-formatting
             start-page-link
             start-image-square
-            start-alias-square])
+            start-alias-square
+            block-beginning-rules])
 
 ;;
 ;; comment

@@ -1,6 +1,7 @@
 (ns roam-parser.state
   (:require
-   [clojure.string]))
+   [clojure.string]
+   [roam-parser.utils :as utils]))
 
 
 (defn lookahead-contains? [state s]
@@ -12,8 +13,7 @@
   (subs (:string state) 0 (:idx state)))
 
 (defn update-last-ctx [state f]
-  (update state :path (fn [path]
-                        (update path (dec (count path)) f))))
+  (update state :path utils/update-last f))
 
 
 (defn get-sub
