@@ -1,6 +1,6 @@
 (ns roam-parser.rules.formatting
   (:require
-   [roam-parser.rules.relationships :refer [allowed-ctxs killed-by-of]]
+   [roam-parser.rules.relationships :refer [ killed-by-of]]
    [roam-parser.transformations :as transf]
    [roam-parser.elements :as elements]
    [roam-parser.state :refer [remaining-str preceding-str]]))
@@ -45,6 +45,5 @@
                            :context/open-idx (-> state :idx (+ 2))
                            :context/elements []
                            :context/killed-by (killed-by-of ctx-id)
-                           :context/allowed-ctxs (allowed-ctxs ctx-id)
                            :context/terminate (terminate-formatting-fn ctx-id char)}
                           state))))

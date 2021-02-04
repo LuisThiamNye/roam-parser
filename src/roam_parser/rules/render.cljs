@@ -1,7 +1,7 @@
 (ns roam-parser.rules.render
   (:require
    [clojure.string]
-   [roam-parser.rules.relationships :refer [allowed-ctxs killed-by-of]]
+   [roam-parser.rules.relationships :refer [killed-by-of]]
    [roam-parser.rules.text-bracket :refer [start-text-bracket-fn]]
    [roam-parser.state :refer [lookahead-contains? get-sub]]
    [roam-parser.elements :as elements]
@@ -44,7 +44,7 @@
                             :context/elements  []
                             :context/text-rules [(start-text-bracket-fn  "{" "}")]
                             :context/killed-by (killed-by-of :context.id/render)
-                            :context/allowed-ctxs #{:context.id/block-ref} ;; TODO adjust for id type
+                            :context/allows-ctx? #(contains? #{:context.id/block-ref} %) ;; TODO adjust for id type
                             :context/terminate terminate-render}
                            {:context/id :context.id/render-id
                             :killed-by (killed-by-of :context.id/render-id)}))
@@ -67,6 +67,6 @@
                              :context/open-idx (-> state :idx (+ 2))
                              :context/elements  []
                              :context/killed-by (killed-by-of :context.id/render-id)
-                             :context/allowed-ctxs (allowed-ctxs :context.id/render-id)
+                             :context/allows-ctx? #(contains? #{:context.id/page-link} %)
                              :context/terminate terminate-render-id}
                             state)))))

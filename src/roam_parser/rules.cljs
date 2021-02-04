@@ -2,7 +2,6 @@
   (:require
    [clojure.string]
    [taoensso.timbre :as t]
-   [roam-parser.transformations :as transf]
    [roam-parser.elements :as elements]
    [roam-parser.utils :as utils]
    [roam-parser.rules.page :refer [start-page-link]]

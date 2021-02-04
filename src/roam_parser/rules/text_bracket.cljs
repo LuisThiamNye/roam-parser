@@ -1,6 +1,5 @@
 (ns roam-parser.rules.text-bracket
   (:require
-   [roam-parser.rules.relationships :refer [allowed-ctxs killed-by-of]]
    [roam-parser.transformations :as transf]
    [roam-parser.state :refer [update-last-ctx]]
    [taoensso.timbre :as t]))

@@ -1,9 +1,9 @@
 (ns roam-parser.builder (:require [clojure.string]
                                   [taoensso.timbre :as t]
-                                  [roam-parser.utils :as utils]
-                                  [roam-parser.rules.relationships :refer [allowed-ctxs]]
                                   [roam-parser.rules :refer [rules]]
-                                  [roam-parser.transformations :as transf]))
+                                  [roam-parser.utils :as utils]
+                                  [roam-parser.transformations :as transf]
+                                  [roam-parser.state :refer [initial-state]]))
 
 (defn probe [x] (.log js/console x) x)
 
@@ -21,14 +21,7 @@
 (defn find-elements [string]
   (let [str-length (count string)
         runs       (volatile! 0)]
-    (loop [state {:path   [{:context/id       :context.id/block
-                            :open-idx         0
-                            :context/elements []
-                            :context/allowed-ctxs (allowed-ctxs :context.id/block)
-                            :context/killed-by #{}
-                            :context/rules    rules}]
-                  :idx    0
-                  :string string}]
+    (loop [state (initial-state string rules)]
       (vswap! runs inc)
       (if (> @runs 100000)
         (js/console.log "too many recurs")

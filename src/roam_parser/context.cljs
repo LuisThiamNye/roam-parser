@@ -1,9 +1,15 @@
-(ns roam-parser.context)
+(ns roam-parser.context
+  (:require
+   [clojure.spec.alpha :as s]))
 
-(defrecord Context [])
+(s/def :context/allows-ctx? fn?)
+(s/def ::ctx (s/keys :req [:context/allows-ctx?]))
 
-(defprotocol ContextProtocol
-  (fallback [ctx]))
+(comment
+  (defrecord Context [])
 
-(defn create-ctx [fields]
-  (extend-type (map->Context fields)))
+   (defprotocol ContextProtocol
+     (fallback [ctx]))
+
+   (defn create-ctx [fields]
+     (extend-type (map->Context fields))))

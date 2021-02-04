@@ -1,8 +1,18 @@
 (ns roam-parser.state
   (:require
    [clojure.string]
+   [roam-parser.rules.relationships :refer [block-ctxs]]
    [roam-parser.utils :as utils]))
 
+(defn initial-state [string rules]
+  {:path   [{:context/id          :context.id/block
+             :open-idx            0
+             :context/elements    []
+             :context/allows-ctx? #(contains? block-ctxs %)
+             :context/killed-by   #{}
+             :context/rules       rules}]
+   :idx    0
+   :string string})
 
 (defn lookahead-contains? [state s]
   (clojure.string/starts-with? (subs (:string state) (inc (:idx state))) s))

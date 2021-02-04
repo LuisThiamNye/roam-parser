@@ -1,7 +1,7 @@
 (ns roam-parser.rules.block-beginning
   (:require
    [roam-parser.transformations :as transf]
-   [roam-parser.rules.relationships :refer [allowed-ctxs killed-by-of]]
+   [roam-parser.rules.relationships :refer [killed-by-of]]
    [roam-parser.elements :as elements]
    [roam-parser.state :refer [lookahead-contains? update-last-ctx get-sub]]
    [roam-parser.utils :as utils]))
@@ -30,7 +30,7 @@
                                   :context/start-idx (:idx state)
                                   :context/rules (-> state :path peek :context/rules)
                                   :context/elements []
-                                  :context/allowed-ctxs #{}
+                                  :context/allows-ctx? (constantly false)
                                   :context/killed-by #{}
                                   :terminate-fallback form-hiccup}))
           (update :idx + 7)))))
@@ -67,7 +67,6 @@
                                   :context/rules (-> state :path peek :context/rules)
                                   :context/elements []
                                   :context/killed-by (killed-by-of :context.id/block-quote)
-                                  :context/allowed-ctxs (allowed-ctxs :context.id/block-quote)
                                   :terminate-fallback form-blockquote}
                                  (transf/set-ctx-fallback state (get-fallbacks))))
           (update :idx + length)))))
@@ -79,3 +78,10 @@
   (fn [_ _]
     (transf/process-char-partially state rules (fn [state]
                                                  (update-last-ctx state #(update % :context/rules pop))))))
+(comment
+  (simple-benchmark [] ((constantly false) :bob) 10000)
+  ;; 6
+  (simple-benchmark [] (#(fn [x] false) :bob) 10000)
+  ;; 5
+  ;;;;;;;;;;;;;;
+  )

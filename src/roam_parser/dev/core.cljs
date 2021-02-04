@@ -1,6 +1,7 @@
 (ns roam-parser.dev.core
   (:require
    [clojure.string :as cstr]
+   [taoensso.timbre :as timbre]
    [cljs.test :as t :include-macros true]
    [devcards.core :as dc :include-macros true :refer-macros [deftest defcard]]
    [roam-parser.core :as parser]
@@ -12,15 +13,6 @@
 
 (def lines (cstr/split sample/text #"\n[ \n]*"))
 
-(def test-str-f "There are_ some__ **bug*s**** in our _parser^ - it__ doesn't handle certain kinds of^^ nesting - and it __is ^^^a bi__t of a pain to ex_tend -- also - it *is *painful whenever we want t^__^^^o make up more speci^^fic syntax - like for queries.")
-
-(def test-str "There are some bugs in our parser - it doesn't handle certain kinds of nesting - and it is a bit of a pain to extend -- also - it is painful whenever we want to make up more specific syntax - like for queries.")
-
-(defn test-2 []
-  (time (dotimes [_ 1000] (parser/parse-block test-str-f)))
-  nil)
-
-(set! (.-test2 js/window) test-2)
 (set! (.-block js/window) parser/parse-block)
 
 
@@ -29,14 +21,18 @@
 
 (defn real-test-builder
   ([start end]
+   (timbre/set-level! :info)
    (time (doseq [line (subvec lines start end)]
            (parser/parse-block line)))
+   (timbre/set-level! :debug)
    nil)
   ([start end debug]
+   (timbre/set-level! :info)
    (if debug
      (time (doseq [line (subvec lines start end)]
              (parser/parse-block (utils/probe line))))
      (real-test-builder start end))
+   (timbre/set-level! :debug)
    nil))
 
 (set! (.-help js/window) real-test-builder)

@@ -1,5 +1,8 @@
 (ns roam-parser.transformations
   (:require
+   [clojure.spec.alpha :as s]
+   [roam-parser.rules.relationships :refer [allowed-ctxs-fn]]
+   [roam-parser.context :as context]
    [roam-parser.utils :as utils]
    [roam-parser.state :refer [get-sub]]
    [taoensso.timbre :as t]))
@@ -20,7 +23,7 @@
   (process-char-partially state state-actions #(update % :idx inc)))
 
 (defn fallback-from-open [ctx]
-  (process-char (:state ctx) (:fallback-rules ctx)))
+  (process-char (:prior-state ctx) (:fallback-rules ctx)))
 
 (defn fallback-from-last [state]
   (let [ctx (-> state :path peek)]
@@ -36,7 +39,6 @@
 (def str-replace-re (js/RegExp. (str "\\\\(?<escape>" (utils/re-to-str #"[\\{}\[\]\(\)`\*_\^:#!\n>]|\${2}") ")")
                                 "g"))
 (defn escape-str [^string string] (.replace string str-replace-re "$<escape>"))
-
 
 (defn conj-text-el [els string ctx end-idx]
   (let [text (get-sub string
@@ -62,14 +64,18 @@
 (defn set-ctx-fallback [ctx state fallbacks]
   (-> ctx
       (assoc :fallback-rules fallbacks)
-      (assoc :state state)))
+      (assoc :prior-state state)))
 
-(defn start-new-ctx [ctx]
+(defn start-new-ctx [ctx parent]
+  {:pre (s/valid? ::context/ctx parent)}
   (fn [state get-fallbacks]
     (let [new-ctx (-> ctx
                       (assoc  :context/rules
                               (conj (-> state :path peek :context/rules)
                                     (:context/terminate ctx)))
+                      (cond-> (nil? (:context/allows-ctx? ctx))
+                        (assoc :context/allows-ctx?
+                               (allowed-ctxs-fn (:context/id ctx) (:context/allows-ctx? parent))))
                       (assoc :context/start-idx (:idx state))
                       (set-ctx-fallback state (get-fallbacks)))]
       (t/debug "START NEW CTX\n" new-ctx)
@@ -78,9 +84,10 @@
           (assoc :idx (:context/open-idx ctx))))))
 
 (defn try-new-ctx [ctx state]
-  (when (or (contains? (-> state :path peek :context/allowed-ctxs) (:context/id ctx))
-            (contains? (-> state :path peek :context/killed-by) (:context/id ctx)))
-    (start-new-ctx ctx)))
+  (let [parent (-> state :path peek)]
+    (when (or ((:context/allows-ctx? parent) (:context/id ctx))
+              (contains? (:context/killed-by parent) (:context/id ctx)))
+      (start-new-ctx ctx parent))))
 
 (defn matches-ctx? [ctx id]
   (= id (:context/id ctx)))
@@ -117,12 +124,16 @@
           (if (parent-killed-by? parent-ctx ctx)
             (do (t/debug "CTX KILLED by parent when CLOSING - parent, child:\n" parent-ctx ctx)
                 (fallback-from-open parent-ctx))
-            (-> state
-                (assoc :path (-> (:path state)
-                                 pop
-                                 (add-element (make-el ctx)
-                                              state (:context/start-idx ctx) next-idx)))
-                (assoc :idx next-idx)))))
+            (if-some [new-el (make-el ctx)]
+              (-> state
+                  (assoc :path (-> (:path state)
+                                   pop
+                                   (add-element new-el
+                                                state (:context/start-idx ctx) next-idx)))
+                  (assoc :idx next-idx))
+              (do
+                (t/debug "CTX->EL FAILED - ignore")
+                (fallback-from-open ctx))))))
       (try-match-ctx path (:context/id closer-data) (:killed-by closer-data))))
 
 
@@ -156,7 +167,7 @@
                                               (let [rules (-> old-ctx :context/rules)]
                                                 (assoc rules (dec (count rules))
                                                        (:context/terminate new-ctx))))
-                                      (assoc :state state)
+                                      (assoc :prior-state state)
                                       (assoc :context/start-idx (:context/start-idx old-ctx))
                                       (assoc :context/fallback-rules (get-fallbacks))
                                       (assoc :context/replaced-ctx old-ctx)))))
