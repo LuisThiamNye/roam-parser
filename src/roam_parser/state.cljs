@@ -6,7 +6,7 @@
 
 (defn initial-state [string rules]
   {:path   [{:context/id          :context.id/block
-             :open-idx            0
+             :context/open-idx            0
              :context/elements    []
              :context/allows-ctx? #(contains? block-ctxs %)
              :context/killed-by   #{}

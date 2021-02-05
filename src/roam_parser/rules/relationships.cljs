@@ -14,7 +14,15 @@
     :context.id/block-ref       #{}
     :context.id/render          #{}
     :context.id/render-id       #{:context.id/render-id}
-    :context.id/attribute       #{:context.id/codeblock}
+    :context.id/attribute  #{:context.id/code
+                             :context.id/codeblock
+                             :context.id/render-id
+                             :context.id/latex
+                             :context.id/alias-square
+                             :context.id/image-square
+                             :context.id/parenthetical
+                             :context.id/page-link
+                             :context.id/block-ref}
     (:context.id/bold
      :context.id/highlight
      :context.id/italic
@@ -90,7 +98,10 @@
                                                   :context.id/tag
                                                   :context.id/block-ref}
                       :context.id/block-ref     #{}
-                      :context.id/attribute     #{:context.id/codeblock}
+                      :context.id/attribute     #{:context.id/bold
+                                                  :context.id/highlight
+                                                  :context.id/italic
+                                                  :context.id/strikethrough}
                       :context.id/bold          #{:context.id/code
                                                   :context.id/page-link
                                                   :context.id/alias-square
@@ -104,7 +115,7 @@
                                                   :context.id/italic
                                                   :context.id/strikethrough}
                       :context.id/italic #{:context.id/code
-                                                  :context.id/page-link
+                                           :context.id/page-link
                                            :context.id/alias-square
                                            :context.id/bold
                                            :context.id/highlight

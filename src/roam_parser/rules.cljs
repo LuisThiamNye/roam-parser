@@ -4,6 +4,7 @@
    [taoensso.timbre :as t]
    [roam-parser.elements :as elements]
    [roam-parser.utils :as utils]
+   [roam-parser.rules.attribute :refer [start-attribute]]
    [roam-parser.rules.page :refer [start-page-link]]
    [roam-parser.rules.block-beginning :refer [block-beginning-rules]]
    [roam-parser.rules.alias :refer [start-alias-square start-image-square]]
@@ -34,6 +35,7 @@
 ;; processed from end to beginning. Order of descending priority
 (def rules [text-rules
             skip-escape-char
+            start-attribute
             start-render
             start-formatting
             start-page-link

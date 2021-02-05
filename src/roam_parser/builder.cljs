@@ -23,8 +23,8 @@
         runs       (volatile! 0)]
     (loop [state (initial-state string rules)]
       (vswap! runs inc)
-      (if (> @runs 100000)
-        (js/console.log "too many recurs")
+      (if (> @runs 10000)
+        (js/console.log "too many recurs:" string)
         (let [idx (:idx state)]
           (if (< idx str-length)
             (recur (transf/process-char state (-> state :path peek :context/rules)))
@@ -59,7 +59,7 @@
            s state]))
 
   (simple-benchmark [] {:context/id       :context.id/alias-square
-                        :open-idx         (inc 54)
+                        :context/open-idx         (inc 54)
                         :context/elements []} 10000)
   ;; 7
 

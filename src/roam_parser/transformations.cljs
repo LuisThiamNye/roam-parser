@@ -53,8 +53,8 @@
         ctx     (peek path)
         ctx-els (:context/elements ctx)
         new-els (-> ctx-els
-                   (conj-text-el (:string state) ctx el-start-idx)
-                   (conj el))]
+                    (conj-text-el (:string state) ctx el-start-idx)
+                    (conj el))]
     (t/debug "FORM ELEMENT" new-els)
     (assoc path ctx-n
            (-> ctx
@@ -103,11 +103,11 @@
             (if (= i last-index)
               ;; add the element
               (fn [state get-fallback]
-                  (state-fn
-                   (update-in state [:path (dec (count path)) :context/elements]
-                              (fn [els]
-                                (conj-text-el els (:string state) this-ctx (:idx state))))
-                   get-fallback))
+                (state-fn
+                 (update-in state [:path (dec (count path)) :context/elements]
+                            (fn [els]
+                              (conj-text-el els (:string state) this-ctx (:idx state))))
+                 get-fallback))
               ;; in-between
               (fn [state _]
                 (t/debug "OVERLAP BACKTRACK - unclosed ctx in the way of termination. Falling back from\n" (peek path))
@@ -132,7 +132,7 @@
                                                 state (:context/start-idx ctx) next-idx)))
                   (assoc :idx next-idx))
               (do
-                (t/debug "CTX->EL FAILED - ignore")
+                (t/debug "CTX->EL FAILED")
                 (fallback-from-open ctx))))))
       (try-match-ctx path (:context/id closer-data) (:killed-by closer-data))))
 
