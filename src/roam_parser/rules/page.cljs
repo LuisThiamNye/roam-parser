@@ -1,6 +1,8 @@
 (ns roam-parser.rules.page
   (:require
    [clojure.string]
+   [taoensso.timbre :as t]
+   [roam-parser.utils :refer [no-blank-ends?]]
    [roam-parser.rules.relationships :refer [killed-by-of]]
    [roam-parser.rules.text-bracket :refer [start-text-bracket-fn]]
    [roam-parser.transformations :as transf]
@@ -14,11 +16,10 @@
         (transf/ctx-to-element (:path state)
                                (fn [ctx]
                                  (let [page-name (subs (:string state) (:context/open-idx ctx) idx)]
-                                   (when (and (not (identical? page-name ""))
-                                              (identical? page-name (clojure.string/trim page-name)))
+                                   (when (no-blank-ends? page-name)
                                      ((if (:page-link/tag? ctx) elements/->BracketTag elements/->PageLink)
-                                       page-name
-                                       (:context/elements ctx)))))
+                                      page-name
+                                      (:context/elements ctx)))))
                                {:context/id :context.id/page-link
                                 :killed-by (killed-by-of :context.id/page-link) ;; TODO use polymorphism? implement killed-by?
                                 :next-idx   (+ 2 idx)})))))
@@ -36,6 +37,25 @@
                              :context/terminate terminate-page-link}
                             state)))))
 
+(defn insert-tag [state]
+  (t/debug "INSERTING tag before the close")
+  (let [ctx (-> state :path peek)
+        idx (:idx state)
+        page-name (subs (:string state) (:context/open-idx ctx) idx)]
+    (when-not (identical? "" page-name)
+      (assoc state :path (-> (:path state)
+                             pop
+                             (transf/add-element (elements/->Tag page-name
+                                                               ;; TODO
+                                                                 nil)
+                                                 state
+                                                 (:context/start-idx ctx)
+                                                 idx))))))
+
+(defn terminate-tag [_ char]
+  (when (nil? (re-matches #"[\w-_@.:*]" char))
+    (fn [state _] (transf/fallback-from-last state))))
+
 (defn start-tag [state char]
   (when (identical? \# char)
     (if (lookahead-contains? state "[[")
@@ -46,6 +66,11 @@
                            :context/text-rules [(start-text-bracket-fn "[" "]")]
                            :context/killed-by (killed-by-of :context.id/page-link)
                            :context/terminate terminate-page-link}
+                          state)
+      (transf/try-new-ctx {:context/id        :context.id/tag
+                           :context/open-idx  (-> state :idx inc)
+                           :terminate-fallback insert-tag
+                           :context/terminate terminate-tag}
                           state))))
 
 (comment

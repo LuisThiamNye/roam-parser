@@ -4,6 +4,7 @@
    [taoensso.timbre :as t]
    [roam-parser.elements :as elements]
    [roam-parser.utils :as utils]
+   [roam-parser.rules.parenthetical :refer [start-parenthetical]]
    [roam-parser.rules.attribute :refer [start-attribute]]
    [roam-parser.rules.page :refer [start-page-link start-tag]]
    [roam-parser.rules.block-beginning :refer [block-beginning-rules]]
@@ -36,6 +37,7 @@
 (def rules [text-rules
             skip-escape-char
             start-attribute
+            start-parenthetical
             start-render
             start-formatting
             start-tag

@@ -119,7 +119,7 @@
 
 
 
-(defrecord Parenthetical [children]
+(defrecord Parenthetical [children allow-block-ref?]
   ElementProtocol
   (allowed-children [_] #{Code Render Url Latex
                           Formatting

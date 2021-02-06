@@ -1,7 +1,7 @@
 (ns roam-parser.rules.block-beginning
   (:require
    [roam-parser.transformations :as transf]
-   [roam-parser.rules.relationships :refer [killed-by-of]]
+   [roam-parser.rules.relationships :refer [killed-by-of allowed-ctxs-fn]]
    [roam-parser.elements :as elements]
    [roam-parser.state :refer [lookahead-contains? update-last-ctx get-sub]]
    [roam-parser.utils :as utils]))
@@ -59,17 +59,19 @@
                                             (lookahead-contains? state "[[>]] "))
                                        [:link-type/tag 7])]
     (fn [state get-fallbacks]
-      (-> state
-          (update :path conj (-> {:context/id :context.id/block-quote
-                                  :link-type link-type
-                                  :context/open-idx length
-                                  :context/start-idx (:idx state)
-                                  :context/rules (-> state :path peek :context/rules)
-                                  :context/elements []
-                                  :context/killed-by (killed-by-of :context.id/block-quote)
-                                  :terminate-fallback form-blockquote}
-                                 (transf/set-ctx-fallback state (get-fallbacks))))
-          (update :idx + length)))))
+      (let [parent (-> state :path peek)]
+        (-> state
+            (update :path conj (-> {:context/id :context.id/block-quote
+                                    :link-type link-type
+                                    :context/open-idx length
+                                    :context/start-idx (:idx state)
+                                    :context/rules (:context/rules parent)
+                                    :context/elements []
+                                    :context/killed-by (killed-by-of :context.id/block-quote)
+                                    :context/allows-ctx? (allowed-ctxs-fn :context.id/block-quote (:context/allows-ctx? parent))
+                                    :terminate-fallback form-blockquote}
+                                   (transf/set-ctx-fallback state (get-fallbacks))))
+            (update :idx + length))))))
 
 (defn start-hr [state _]
   (when (identical? "---" (:string state))

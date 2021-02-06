@@ -74,14 +74,11 @@
                                                   :context.id/strikethrough
                                                   :context.id/code
                                                   :context.id/image-square}
-                      :context.id/alias-round   #{:context.id/block-ref
-                                                  :context.id/page-link}
                       :context.id/image-square  #{:context.id/bold
                                                   :context.id/highlight
                                                   :context.id/italic
                                                   :context.id/strikethrough
                                                   :context.id/image-square}
-                      :context.id/image-round   #{}
                       :context.id/parenthetical #{:context.id/code
                                                   :context.id/render
                                                   :context.id/url

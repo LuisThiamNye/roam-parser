@@ -38,6 +38,13 @@
                               :killed-by  (killed-by-of round-id)
                               :next-idx   (-> state :idx inc)}))))
 
+(defn allows-ctxs-for-round [id]
+  (case id
+    :context.id/alias-round   #{:context.id/block-ref
+                                :context.id/page-link}
+    :context.id/image-round   #{}))
+
+
 (defn terminate-alias-square-fn [square-id round-id]
   (fn [state char]
     (when (identical? "]" char)
@@ -48,6 +55,7 @@
                           :context/elements  []
                           :context/text-rules [(start-text-bracket-fn  "(" ")")]
                           :context/killed-by (killed-by-of round-id)
+                          :context/allows-ctx? #(contains? (allows-ctxs-for-round round-id) %)
                           :context/terminate (terminate-alias-round-fn round-id)}
                          {:context/id square-id
                           :killed-by (killed-by-of square-id)})

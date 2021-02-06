@@ -1,4 +1,6 @@
-(ns roam-parser.utils)
+(ns roam-parser.utils
+  (:require
+   [clojure.string]))
 
 (defn probe
   ([x] (.log js/console x) x)
@@ -11,3 +13,8 @@
 
 (defn update-last [coll f]
   (update coll (dec (count coll)) f))
+
+(defn no-blank-ends? [s]
+  (not (or (nil? s)
+           (identical? s "")
+           (not  (identical? s (clojure.string/trim s))))))

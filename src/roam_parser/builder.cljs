@@ -133,4 +133,10 @@
                              (nth ex-el i)
                              (recur (dec i))))) 1000)
   ;; 4
+
+  (def re (js/RegExp #"\w*"))
+  (simple-benchmark [] (re-find re str-ex) 10000)
+  ;; 4
+
+  ;;;;;;;;;;;
   )

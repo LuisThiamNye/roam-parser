@@ -26,10 +26,11 @@
   (process-char (:prior-state ctx) (:fallback-rules ctx)))
 
 (defn fallback-from-last [state]
+  (t/debug "FALLBACK FROM END OF RUN")
   (let [ctx (-> state :path peek)]
-    (if-some [terminate-fallback (:terminate-fallback ctx)]
-      (terminate-fallback state)
-      (fallback-from-open ctx))))
+    (or (when-some [terminate-fallback (:terminate-fallback ctx)]
+          (terminate-fallback state))
+        (fallback-from-open ctx))))
 
 
 (defn parent-killed-by? [ctx killer-ctx]
@@ -168,6 +169,10 @@
                                                 (assoc rules (dec (count rules))
                                                        (:context/terminate new-ctx))))
                                       (assoc :prior-state state)
+                                      (cond-> (nil? (:context/allows-ctx? new-ctx))
+                                        (assoc :context/allows-ctx?
+                                               (allowed-ctxs-fn (:context/id new-ctx)
+                                                                (:context/allows-ctx? (-> state :path peek peek)))))
                                       (assoc :context/start-idx (:context/start-idx old-ctx))
                                       (assoc :context/fallback-rules (get-fallbacks))
                                       (assoc :context/replaced-ctx old-ctx)))))
