@@ -151,7 +151,7 @@
 (defn new-single-element [el next-idx]
   (fn [state _]
     (-> state
-        (update :path add-element el state (-> state peek :context/start-idx) next-idx)
+        (update :path add-element el state (-> state :path peek :context/start-idx) next-idx)
         (assoc :idx next-idx))))
 
 (defn swap-ctx [path new-ctx token-data]

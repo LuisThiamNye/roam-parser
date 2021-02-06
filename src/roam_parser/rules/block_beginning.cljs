@@ -71,7 +71,11 @@
                                  (transf/set-ctx-fallback state (get-fallbacks))))
           (update :idx + length)))))
 
-(def rules [start-hiccup start-blockquote])
+(defn start-hr [state _]
+  (when (identical? "---" (:string state))
+    (transf/new-single-element (elements/->Hr) 3)))
+
+(def rules [start-hiccup start-hr start-blockquote])
 
 ;; must be at the end of rules vector
 (defn block-beginning-rules [state _]
