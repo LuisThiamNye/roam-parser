@@ -5,7 +5,7 @@
    [roam-parser.elements :as elements]
    [roam-parser.utils :as utils]
    [roam-parser.rules.attribute :refer [start-attribute]]
-   [roam-parser.rules.page :refer [start-page-link]]
+   [roam-parser.rules.page :refer [start-page-link start-tag]]
    [roam-parser.rules.block-beginning :refer [block-beginning-rules]]
    [roam-parser.rules.alias :refer [start-alias-square start-image-square]]
    [roam-parser.rules.render :refer [start-render]]
@@ -38,6 +38,7 @@
             start-attribute
             start-render
             start-formatting
+            start-tag
             start-page-link
             start-image-square
             start-alias-square

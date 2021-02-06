@@ -16,9 +16,9 @@
                                  (let [page-name (subs (:string state) (:context/open-idx ctx) idx)]
                                    (when (and (not (identical? page-name ""))
                                               (identical? page-name (clojure.string/trim page-name)))
-                                     (elements/->PageLink
-                                      page-name
-                                      (:context/elements ctx)))))
+                                     ((if (:page-link/tag? ctx) elements/->BracketTag elements/->PageLink)
+                                       page-name
+                                       (:context/elements ctx)))))
                                {:context/id :context.id/page-link
                                 :killed-by (killed-by-of :context.id/page-link) ;; TODO use polymorphism? implement killed-by?
                                 :next-idx   (+ 2 idx)})))))
@@ -28,12 +28,25 @@
     (let [double? (lookahead-contains? state "[")]
       (when double?
         (transf/try-new-ctx {:context/id        :context.id/page-link
+                             :page-link/tag? false
                              :context/open-idx  (-> state :idx (+ 2))
                              :context/elements  []
                              :context/text-rules [(start-text-bracket-fn "[" "]")]
                              :context/killed-by (killed-by-of :context.id/page-link)
                              :context/terminate terminate-page-link}
                             state)))))
+
+(defn start-tag [state char]
+  (when (identical? \# char)
+    (if (lookahead-contains? state "[[")
+      (transf/try-new-ctx {:context/id        :context.id/page-link
+                           :page-link/tag? true
+                           :context/open-idx  (-> state :idx (+ 3))
+                           :context/elements  []
+                           :context/text-rules [(start-text-bracket-fn "[" "]")]
+                           :context/killed-by (killed-by-of :context.id/page-link)
+                           :context/terminate terminate-page-link}
+                          state))))
 
 (comment
   (simple-benchmark [] (clojure.string/starts-with? "    abc" \space) 10000)
