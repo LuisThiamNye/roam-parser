@@ -37,7 +37,7 @@
   (stringify [_]
     (str "```" language \newline raw-content "\n```")))
 
-(defrecord Code [raw-content content]
+(defrecord Code [raw-content]
   ElementProtocol
   (allowed-children [_])
   (killed-by [_] #{Codeblock})

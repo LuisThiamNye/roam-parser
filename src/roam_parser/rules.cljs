@@ -4,6 +4,7 @@
    [taoensso.timbre :as t]
    [roam-parser.elements :as elements]
    [roam-parser.utils :as utils]
+   [roam-parser.rules.code :refer [start-code start-codeblock]]
    [roam-parser.rules.parenthetical :refer [start-parenthetical]]
    [roam-parser.rules.attribute :refer [start-attribute]]
    [roam-parser.rules.page :refer [start-page-link start-tag]]
@@ -39,6 +40,8 @@
             start-latex
             start-attribute
             start-render
+            start-code
+            start-codeblock
             start-parenthetical
             start-formatting
             start-tag
