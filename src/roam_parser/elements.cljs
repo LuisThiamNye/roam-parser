@@ -30,7 +30,7 @@
 
 
 
-(defrecord Codeblock [^string language ^string raw-content ^string content]
+(defrecord Codeblock [^string language ^string raw-content]
   ElementProtocol
   (allowed-children [_])
   (killed-by [_])

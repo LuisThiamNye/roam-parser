@@ -6,9 +6,38 @@
    [roam-parser.elements :as elements]
    [roam-parser.state :refer [remaining-str preceding-str]]))
 
-(defn terminate-codeblock [state char])
+(defn valid-lang? [lang]
+  (contains? #{"clojure" "javascript"
+               "common lisp"}
+             lang))
 
-(defn start-codeblock [state char])
+(defn terminate-codeblock [state char]
+  (when (and (identical? \` char)
+             (re-find #"(?m)^``$" (remaining-str state)))
+    (transf/ctx-to-element (:path state)
+                           (fn [ctx]
+                             (let [content (or (some-> ctx :context/elements peek) "")]
+                               (elements/->Codeblock (:codeblock/lang ctx)
+                                                     (cond-> content
+                                                       (clojure.string/ends-with? content "\n")
+                                                       (subs 0 (dec (count content)))))))
+                           {:context/id :context.id/codeblock
+                            :killed-by  (killed-by-of :context.id/codeblock)
+                            :next-idx   (-> state :idx (+ 4))})))
+
+(defn start-codeblock [state char]
+  (when (and (identical? \` char)
+             (re-find #"(?m)^$" (preceding-str state)))
+    (let [lang (some-> (re-find #"(?m)^``[\w ]*$" (remaining-str state))
+                       (subs 2))]
+      (when (valid-lang? lang)
+        (transf/try-new-ctx {:context/id        :context.id/codeblock
+                             :codeblock/lang lang
+                             :context/open-idx  (-> state :idx (+ 4 (count lang)))
+                             :context/elements  []
+                             :context/killed-by (killed-by-of :context.id/codeblock)
+                             :context/terminate terminate-codeblock}
+                            state)))))
 
 (defn excess-backticks [state]
   (re-find #"^`*" (remaining-str state)))
