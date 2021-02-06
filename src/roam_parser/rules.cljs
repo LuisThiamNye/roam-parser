@@ -10,7 +10,7 @@
    [roam-parser.rules.block-beginning :refer [block-beginning-rules]]
    [roam-parser.rules.alias :refer [start-alias-square start-image-square]]
    [roam-parser.rules.render :refer [start-render]]
-   [roam-parser.rules.formatting :refer [start-formatting]]))
+   [roam-parser.rules.formatting :refer [start-formatting start-latex]]))
 
 
 
@@ -36,9 +36,10 @@
 ;; processed from end to beginning. Order of descending priority
 (def rules [text-rules
             skip-escape-char
+            start-latex
             start-attribute
-            start-parenthetical
             start-render
+            start-parenthetical
             start-formatting
             start-tag
             start-page-link
