@@ -71,6 +71,7 @@
           (-> state (try-new-code #(conj (get-fallbacks)
                                          (fn [state _]
                                            (transf/new-single-element (elements/->Code (subs excess 1))
+                                                                      (-> state :roam-parser.state/path peek :context/start-idx)
                                                                       (-> state :idx (+ 1 excess-count))))))
               (update :idx + 1 excess-count)))
         try-new-code))))

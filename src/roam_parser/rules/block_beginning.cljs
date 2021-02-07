@@ -75,15 +75,16 @@
 
 (defn start-hr [state _]
   (when (identical? "---" (:string state))
-    (transf/new-single-element (elements/->Hr) 3)))
+    (transf/new-single-element (elements/->Hr) 0 3)))
 
 (def rules [start-hiccup start-hr start-blockquote])
 
 ;; must be at the end of rules vector
 (defn block-beginning-rules [state _]
   (fn [_ _]
-    (transf/process-char-partially state rules (fn [state]
-                                                 (update-last-ctx state #(update % :context/rules pop))))))
+    (let [next-state (update-last-ctx state #(update % :context/rules pop))]
+      (or (transf/process-char-partially next-state rules)
+          next-state))))
 (comment
   (simple-benchmark [] ((constantly false) :bob) 10000)
   ;; 6

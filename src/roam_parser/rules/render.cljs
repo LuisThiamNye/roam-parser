@@ -15,7 +15,7 @@
 
 (defn start-pipe [state char]
   (when (identical? \| char)
-    (transf/new-single-element \| (-> state :idx inc))))
+    (transf/new-single-element \| (:idx state) (-> state :idx inc))))
 
 (defn elements-empty? [els]
   (or (zero? (count els))
@@ -80,7 +80,40 @@
             elements/PageLink {:node/title (:page-name el)}
             (t/warn "unrecognised element in" (:render/id ctx) "of type" (type el)))))
       "="     nil
-      "or"    nil
+      "or"    (let [els (:context/elements ctx)
+                    groups (-> (reduce (fn [groups el]
+                                         (if (string? el)
+                                           (let [[group-tail & new-group-strs] (clojure.string/split el #"\s*\|\s*")]
+                                             (if (nil? group-tail)
+                                            ;; entire string is the delimiter
+                                               (conj groups [])
+                                               (-> groups
+                                                   (cond-> (not (clojure.string/blank? group-tail))
+                                                     (utils/update-last #(conj % group-tail)))
+                                                   (as-> g (reduce (fn [gs s]
+                                                                     (if (clojure.string/blank? s)
+                                                                       gs
+                                                                       (conj gs (vector s))))
+                                                                   g
+                                                                   new-group-strs))
+                                                   (cond-> (re-find #"\|\s*$" el)
+                                                     (conj [])))))
+                                           (utils/update-last groups #(conj % el))))
+                                       [[]]
+                                       els)
+                               ;; trim off empty group at the end
+                               (as-> gs (cond-> gs (-> gs peek count zero?) pop))
+                               ;; remove leading whitespace
+                               (update-in [0 0] (fn [el]
+                                                  (cond-> el (string? el)
+                                                          (clojure.string/replace #"^\s*" ""))))
+                               ;; remove trailing whitespace
+                               (utils/update-last (fn [last-g]
+                                                    (utils/update-last last-g
+                                                                       (fn [last-el]
+                                                                         (cond-> last-el (string? last-el)
+                                                                                 (clojure.string/replace #"\s*$" "")))))))]
+                {:groups groups})
       "query" nil
       (if (delta-id? render-id)
         (let [els (:context/elements ctx)]
@@ -118,8 +151,8 @@
           ("embed"
            "mentions") [#{:context.id/block-ref :context.id/page-link} true]
           "attr-table" [#{:context.id/page-link} true]
-          "=" [block-ctxs false [start-pipe]]
-          "or" [block-ctxs false [start-pipe]]
+          "=" [block-ctxs false ]
+          "or" [block-ctxs false ]
           "query" [#{:context.id/curly-list} true [start-curly-list]]
           (if (delta-id? id)
             [#{:context.id/curly-list} false [start-curly-list]]
@@ -150,15 +183,15 @@
         (when-some [[linked? render-id] (render-id-data state)]
           (transf/swap-ctx (:roam-parser.state/path state)
                            (configure-render-ctx
-                            {:context/id :context.id/render
-                             :render/id render-id
-                             :linked? linked?
-                             :context/open-idx  (-> state :idx inc)
-                             :context/elements  []
+                            {:context/id         :context.id/render
+                             :render/id          render-id
+                             :linked?            linked?
+                             :context/open-idx   (-> state :idx inc)
+                             :context/elements   []
                              :context/text-rules [(start-text-bracket-fn  "{" "}")]
-                             :context/killed-by (killed-by-of :context.id/render)})
+                             :context/killed-by  (killed-by-of :context.id/render)})
                            {:context/id :context.id/render-id
-                            :killed-by (killed-by-of :context.id/render-id)}))
+                            :killed-by  (killed-by-of :context.id/render-id)}))
 
         (and (identical? char "}")
              (lookahead-contains? state "}"))
@@ -167,7 +200,7 @@
                                  (fn [_]
                                    (elements/->Render render-id linked? nil nil))
                                  {:context/id :context.id/render-id
-                                  :killed-by (killed-by-of :context.id/render-id)
+                                  :killed-by  (killed-by-of :context.id/render-id)
                                   :next-idx   (-> state :idx (+ 2))}))))
 
 (defn start-render [state char]
@@ -236,6 +269,22 @@
   (def make-s (:assemble-url c))
   (make-s (fn [uid]
             (case uid "x" "content")))
+
+  (def s "| some | text | here ")
+  (def s "|")
+  (def s "  |")
+  (def s "abc |")
+  (def s "|  ")
+  (def s "")
+  (def s "| d | ")
+  (def s "b| | a")
+  (def s " | | ")
+  (clojure.string/split s #"\s*\|\s*")
+  (clojure.string/split s #"\s*\|")
+  (clojure.string/split s #"\|\s*")
+
+  (let [[a & rest] [1 2 3]]
+    (prn a rest))
 
   ;;;;;;;;;
   )

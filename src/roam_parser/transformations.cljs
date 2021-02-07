@@ -7,12 +7,11 @@
    [roam-parser.state :as state :refer [get-sub]]
    [taoensso.timbre :as t]))
 
-(defn process-char-partially [state state-actions fallback]
+(defn process-char-partially [state state-actions]
   {:pre (s/valid? ::state/state state)}
   (let [char (nth (:string state) (:idx state))]
     (loop [i (dec (count state-actions))]
-      (if (neg? i)
-        (fallback state)
+      (when (>= i 0)
         ;; TODO what is the point of returning a function when it can just simply return the transformed state?
         (let [action-fn (nth state-actions i)]
           (if-some [transform-state (action-fn state char)]
@@ -20,7 +19,8 @@
             (recur (dec i))))))))
 
 (defn process-char [state state-actions]
-  (process-char-partially state state-actions #(update % :idx inc)))
+  (or (process-char-partially state state-actions)
+      (update state :idx inc)))
 
 (defn fallback-from-open [ctx]
   (process-char (:prior-state ctx) (:fallback-rules ctx)))
@@ -151,10 +151,10 @@
         (update ::state/path pop)
         (update :idx + closer-length))))
 
-(defn new-single-element [el next-idx]
+(defn new-single-element [el start-idx next-idx]
   (fn [state _]
     (-> state
-        (update ::state/path add-element el state (-> state :roam-parser.state/path peek :context/start-idx) next-idx)
+        (update ::state/path add-element el state start-idx next-idx)
         (assoc :idx next-idx))))
 
 (defn swap-ctx [path new-ctx token-data]
