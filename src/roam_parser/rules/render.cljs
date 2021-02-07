@@ -38,6 +38,40 @@
 (defn delta-id? [id]
   (= 8710 (.charCodeAt id 0)))
 
+(defn clean-groups [groups]
+  (-> groups
+      ;; trim off empty group at the end
+      (as-> gs (cond-> gs (-> gs peek count zero?) pop))
+                               ;; remove leading whitespace
+      (update-in [0 0] (fn [el]
+                         (cond-> el (string? el)
+                                 (clojure.string/replace #"^\s*" ""))))
+                               ;; remove trailing whitespace
+      (utils/update-last (fn [last-g]
+                           (utils/update-last last-g
+                                              (fn [last-el]
+                                                (cond-> last-el (string? last-el)
+                                                        (clojure.string/replace #"\s*$" ""))))))))
+
+(defn split-el-into-groups [groups el max-splits]
+  (if (string? el)
+                                           (let [[group-tail & new-group-strs] (clojure.string/split el #"\s*\|\s*" max-splits)]
+                                             (if (nil? group-tail)
+                                            ;; entire string is the delimiter
+                                               (conj groups [])
+                                               (-> groups
+                                                   (cond-> (not (clojure.string/blank? group-tail))
+                                                     (utils/update-last #(conj % group-tail)))
+                                                   (as-> g (reduce (fn [gs s]
+                                                                     (if (clojure.string/blank? s)
+                                                                       gs
+                                                                       (conj gs (vector s))))
+                                                                   g
+                                                                   new-group-strs))
+                                                   (cond-> (re-find #"\|\s*$" el)
+                                                     (conj [])))))
+                                           (utils/update-last groups #(conj % el))))
+
 (defn render-comp [ctx]
   (let [render-id (:render/id ctx)]
     (case render-id
@@ -79,40 +113,24 @@
           (condp instance? el
             elements/PageLink {:node/title (:page-name el)}
             (t/warn "unrecognised element in" (:render/id ctx) "of type" (type el)))))
-      "="     nil
+      "="     (let [els (:context/elements ctx)
+                    [visible hidden] (-> (loop [groups [[]]
+                                                els-left els]
+                                           (if-some [el (first els-left)]
+                                             (let [next-groups (split-el-into-groups groups el 2)]
+                                               (if (> (count next-groups) 1)
+                                                 (utils/update-last next-groups #(into % (next els-left)))
+                                                 (recur next-groups (next els-left))))
+                                             groups))
+                                         clean-groups)]
+                {:visible-elements visible
+                 :hidden-elements hidden})
       "or"    (let [els (:context/elements ctx)
                     groups (-> (reduce (fn [groups el]
-                                         (if (string? el)
-                                           (let [[group-tail & new-group-strs] (clojure.string/split el #"\s*\|\s*")]
-                                             (if (nil? group-tail)
-                                            ;; entire string is the delimiter
-                                               (conj groups [])
-                                               (-> groups
-                                                   (cond-> (not (clojure.string/blank? group-tail))
-                                                     (utils/update-last #(conj % group-tail)))
-                                                   (as-> g (reduce (fn [gs s]
-                                                                     (if (clojure.string/blank? s)
-                                                                       gs
-                                                                       (conj gs (vector s))))
-                                                                   g
-                                                                   new-group-strs))
-                                                   (cond-> (re-find #"\|\s*$" el)
-                                                     (conj [])))))
-                                           (utils/update-last groups #(conj % el))))
+                                         (split-el-into-groups groups el :no-limit))
                                        [[]]
                                        els)
-                               ;; trim off empty group at the end
-                               (as-> gs (cond-> gs (-> gs peek count zero?) pop))
-                               ;; remove leading whitespace
-                               (update-in [0 0] (fn [el]
-                                                  (cond-> el (string? el)
-                                                          (clojure.string/replace #"^\s*" ""))))
-                               ;; remove trailing whitespace
-                               (utils/update-last (fn [last-g]
-                                                    (utils/update-last last-g
-                                                                       (fn [last-el]
-                                                                         (cond-> last-el (string? last-el)
-                                                                                 (clojure.string/replace #"\s*$" "")))))))]
+                               clean-groups)]
                 {:groups groups})
       "query" nil
       (if (delta-id? render-id)
