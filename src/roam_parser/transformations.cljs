@@ -4,11 +4,11 @@
    [roam-parser.rules.relationships :refer [allowed-ctxs-fn]]
    [roam-parser.context :as context]
    [roam-parser.utils :as utils]
-   [roam-parser.state :refer [get-sub]]
+   [roam-parser.state :as state :refer [get-sub]]
    [taoensso.timbre :as t]))
 
 (defn process-char-partially [state state-actions fallback]
-  {:pre (map? state)}
+  {:pre (s/valid? ::state/state state)}
   (let [char (nth (:string state) (:idx state))]
     (loop [i (dec (count state-actions))]
       (if (neg? i)
@@ -27,7 +27,7 @@
 
 (defn fallback-from-last [state]
   (t/debug "FALLBACK FROM END OF RUN")
-  (let [ctx (-> state :path peek)]
+  (let [ctx (-> state ::state/path peek)]
     (or (when-some [terminate-fallback (:terminate-fallback ctx)]
           (terminate-fallback state))
         (fallback-from-open ctx))))
@@ -42,11 +42,13 @@
 (defn escape-str [^string string] (.replace string str-replace-re "$<escape>"))
 
 (defn conj-text-el [els string ctx end-idx]
-  (let [text (get-sub string
-                      (or (:context/last-idx ctx) (:context/open-idx ctx))
-                      end-idx)]
-    (cond-> els
-      (not (identical? "" text)) (conj text))))
+  (if (:context/ignore-text? ctx)
+    els
+    (let [text (get-sub string
+                        (or (:context/last-idx ctx) (:context/open-idx ctx))
+                        end-idx)]
+      (cond-> els
+        (not (identical? "" text)) (conj text)))))
 
 
 (defn add-element [path el state el-start-idx next-idx]
@@ -72,7 +74,7 @@
   (fn [state get-fallbacks]
     (let [new-ctx (-> ctx
                       (assoc  :context/rules
-                              (conj (-> state :path peek :context/rules)
+                              (conj (-> state ::state/path peek :context/rules)
                                     (:context/terminate ctx)))
                       (cond-> (nil? (:context/allows-ctx? ctx))
                         (assoc :context/allows-ctx?
@@ -81,11 +83,11 @@
                       (set-ctx-fallback state (get-fallbacks)))]
       (t/debug "START NEW CTX\n" new-ctx)
       (-> state
-          (update :path conj new-ctx)
+          (update ::state/path conj new-ctx)
           (assoc :idx (:context/open-idx ctx))))))
 
 (defn try-new-ctx [ctx state]
-  (let [parent (-> state :path peek)]
+  (let [parent (-> state ::state/path peek)]
     (when (or ((:context/allows-ctx? parent) (:context/id ctx))
               (contains? (:context/killed-by parent) (:context/id ctx)))
       (start-new-ctx ctx parent))))
@@ -105,7 +107,7 @@
               ;; add the element
               (fn [state get-fallback]
                 (state-fn
-                 (update-in state [:path (dec (count path)) :context/elements]
+                 (update-in state [::state/path (dec (count path)) :context/elements]
                             (fn [els]
                               (conj-text-el els (:string state) this-ctx (:idx state))))
                  get-fallback))
@@ -119,18 +121,18 @@
 
 (defn ctx-to-element [path make-el closer-data]
   (-> (fn [state _]
-        (let [parent-ctx (-> state :path pop peek)
-              ctx        (-> state :path peek)
+        (let [parent-ctx (-> state ::state/path pop peek)
+              ctx        (-> state ::state/path peek)
               next-idx   (:next-idx closer-data)]
           (if (parent-killed-by? parent-ctx ctx)
             (do (t/debug "CTX KILLED by parent when CLOSING - parent, child:\n" parent-ctx ctx)
                 (fallback-from-open parent-ctx))
             (if-some [new-el (make-el ctx)]
               (-> state
-                  (assoc :path (-> (:path state)
-                                   pop
-                                   (add-element new-el
-                                                state (:context/start-idx ctx) next-idx)))
+                  (assoc ::state/path (-> (:roam-parser.state/path state)
+                                          pop
+                                          (add-element new-el
+                                                       state (:context/start-idx ctx) next-idx)))
                   (assoc :idx next-idx))
               (do
                 (t/debug "CTX->EL FAILED")
@@ -144,38 +146,40 @@
 (defn clear-ctx
   [closer-length]
   (fn [state _]
-    (t/debug "CLEAR CTX" (-> state :path peek))
+    (t/debug "CLEAR CTX" (-> state ::state/path peek))
     (-> state
-        (update :path pop)
+        (update ::state/path pop)
         (update :idx + closer-length))))
 
 (defn new-single-element [el next-idx]
   (fn [state _]
     (-> state
-        (update :path add-element el state (-> state :path peek :context/start-idx) next-idx)
+        (update ::state/path add-element el state (-> state :roam-parser.state/path peek :context/start-idx) next-idx)
         (assoc :idx next-idx))))
 
 (defn swap-ctx [path new-ctx token-data]
   (try-match-ctx
    (fn [state get-fallbacks]
-     (let [old-ctx (-> state :path peek)]
+     (let [old-ctx (-> state ::state/path peek)]
        (t/debug "SWAP ctx" old-ctx "\nto (partial)" new-ctx)
        (-> state
-           (update :path (fn [path]
-                           (assoc path (dec (count path))
-                                  (-> new-ctx
-                                      (assoc  :context/rules
-                                              (let [rules (-> old-ctx :context/rules)]
-                                                (assoc rules (dec (count rules))
-                                                       (:context/terminate new-ctx))))
-                                      (assoc :prior-state state)
-                                      (cond-> (nil? (:context/allows-ctx? new-ctx))
-                                        (assoc :context/allows-ctx?
-                                               (allowed-ctxs-fn (:context/id new-ctx)
-                                                                (:context/allows-ctx? (-> state :path peek peek)))))
-                                      (assoc :context/start-idx (:context/start-idx old-ctx))
-                                      (assoc :context/fallback-rules (get-fallbacks))
-                                      (assoc :context/replaced-ctx old-ctx)))))
+           (update ::state/path (fn [path]
+                                             (assoc path (dec (count path))
+                                                    (-> new-ctx
+                                                        (assoc  :context/rules
+                                                                (let [rules (-> old-ctx :context/rules)]
+                                                                  (if-some [extra-rules (:context/extra-rules new-ctx)]
+                                                                    (-> rules pop (into extra-rules))
+                                                                    (assoc rules (dec (count rules))
+                                                                           (:context/terminate new-ctx)))))
+                                                        (assoc :prior-state state)
+                                                        (cond-> (nil? (:context/allows-ctx? new-ctx))
+                                                          (assoc :context/allows-ctx?
+                                                                 (allowed-ctxs-fn (:context/id new-ctx)
+                                                                                  (:context/allows-ctx? (-> state ::state/path peek peek)))))
+                                                        (assoc :context/start-idx (:context/start-idx old-ctx))
+                                                        (assoc :context/fallback-rules (get-fallbacks))
+                                                        (assoc :context/replaced-ctx old-ctx)))))
            (assoc :idx (:context/open-idx new-ctx)))))
    path (:context/id token-data) (:killed-by token-data)))
 

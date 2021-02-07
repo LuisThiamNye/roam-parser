@@ -9,7 +9,7 @@
 (defn terminate-alias-round-fn [round-id]
   (fn [state char]
     (when (identical? ")" char)
-      (transf/ctx-to-element (:path state)
+      (transf/ctx-to-element (:roam-parser.state/path state)
                              (case round-id
                                :context.id/alias-round
                                (fn [ctx]
@@ -49,7 +49,7 @@
   (fn [state char]
     (when (identical? "]" char)
       (if  (lookahead-contains? state "(")
-        (transf/swap-ctx (:path state)
+        (transf/swap-ctx (:roam-parser.state/path state)
                          {:context/id round-id
                           :context/open-idx  (-> state :idx (+ 2))
                           :context/elements  []
@@ -60,7 +60,7 @@
                          {:context/id square-id
                           :killed-by (killed-by-of square-id)})
         (fn [state _]
-          (transf/fallback-from-open (-> state :path peek)))))))
+          (transf/fallback-from-open (-> state :roam-parser.state/path peek)))))))
 
 (defn start-alias-square [state char]
   (when (identical? "[" char)

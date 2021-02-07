@@ -3,7 +3,8 @@
    [clojure.spec.alpha :as s]))
 
 (s/def :context/allows-ctx? fn?)
-(s/def ::ctx (s/keys :req [:context/allows-ctx?]))
+(s/def :context/elements vector?)
+(s/def ::ctx (s/keys :req [:context/allows-ctx? :context/elements]))
 
 (comment
   (defrecord Context [])

@@ -31,7 +31,7 @@
   (fn [state char]
     (when (and (identical? char match-char)
                (only-two-closers? state match-char))
-      (transf/ctx-to-element (:path state)
+      (transf/ctx-to-element (:roam-parser.state/path state)
                              (fn [ctx]
                                (elements/->Formatting (ctx->format-id ctx-id)
                                                       (:context/elements ctx)))
@@ -58,7 +58,7 @@
 (defn terminate-latex [state char]
   (when (and (identical? \$ char)
              (only-two-closers? state char))
-    (transf/ctx-to-element (:path state)
+    (transf/ctx-to-element (:roam-parser.state/path state)
                            (fn [ctx]
                              (let [content (-> ctx :context/elements peek)]
                                (when-not (clojure.string/blank? content)

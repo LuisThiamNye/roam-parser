@@ -3,7 +3,7 @@
                                   [roam-parser.rules :refer [rules]]
                                   [roam-parser.utils :as utils]
                                   [roam-parser.transformations :as transf]
-                                  [roam-parser.state :refer [initial-state]]))
+                                  [roam-parser.state :as state :refer [initial-state]]))
 
 (defn probe [x] (.log js/console x) x)
 
@@ -27,14 +27,14 @@
         (js/console.log "too many recurs:" string)
         (let [idx (:idx state)]
           (if (< idx str-length)
-            (recur (transf/process-char state (-> state :path peek :context/rules)))
+            (recur (transf/process-char state (-> state ::state/path peek :context/rules)))
             ;; end of block
-            (let [path (:path state)]
+            (let [path (:roam-parser.state/path state)]
               (if (< 1 (count path))
-                (do (t/debug "UNCLOSED AT EOL" (-> state :path peek))
+                (do (t/debug "UNCLOSED AT EOL" (-> state ::state/path peek))
                     (recur (transf/fallback-from-last state)))
-                (-> state :path (nth 0) :context/elements
-                    (transf/conj-text-el string (-> state :path (nth 0)) str-length))))))))))
+                (-> state ::state/path (nth 0) :context/elements
+                    (transf/conj-text-el string (-> state ::state/path (nth 0)) str-length))))))))))
 
 ;;
 ;; **** rich comment block ****

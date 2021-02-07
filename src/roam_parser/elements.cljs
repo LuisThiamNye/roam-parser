@@ -196,7 +196,7 @@
                    Code})
   (stringify [_] (str "{" (stringify-children children) "}")))
 
-(defrecord Render [id linked? children]
+(defrecord Render [id linked? children component]
   ElementProtocol
   (allowed-children [_] #{PageLink Parenthetical Curly Round Square})
   (killed-by [_] #{Codeblock

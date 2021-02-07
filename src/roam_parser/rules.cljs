@@ -28,7 +28,7 @@
 
 
 (defn text-rules [state char]
-  (let [rules (-> state :path peek :context/text-rules)]
+  (let [rules (-> state :roam-parser.state/path peek :context/text-rules)]
     (loop [i (dec (count rules))]
       (when-not (neg? i)
         (or ((nth rules i) state char)

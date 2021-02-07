@@ -6,9 +6,9 @@
    [roam-parser.state :refer [lookahead-contains? update-last-ctx get-sub]]
    [roam-parser.utils :as utils]))
 
-(defn form-hiccup [state] (let [hiccup-ctx (-> state :path peek)]
-                            (assoc state :path
-                                   (-> (:path state)
+(defn form-hiccup [state] (let [hiccup-ctx (-> state :roam-parser.state/path peek)]
+                            (assoc state :roam-parser.state/path
+                                   (-> (:roam-parser.state/path state)
                                        pop
                                        (utils/update-last
                                         #(-> %
@@ -25,28 +25,28 @@
               (lookahead-contains? state "hiccup"))
     (fn [state _]
       (-> state
-          (update :path conj (-> {:context/id :context.id/hiccup
-                                  :context/open-idx 7
-                                  :context/start-idx (:idx state)
-                                  :context/rules (-> state :path peek :context/rules)
-                                  :context/elements []
-                                  :context/allows-ctx? (constantly false)
-                                  :context/killed-by #{}
-                                  :terminate-fallback form-hiccup}))
+          (update :roam-parser.state/path conj (-> {:context/id :context.id/hiccup
+                                                    :context/open-idx 7
+                                                    :context/start-idx (:idx state)
+                                                    :context/rules (-> state :roam-parser.state/path peek :context/rules)
+                                                    :context/elements []
+                                                    :context/allows-ctx? (constantly false)
+                                                    :context/killed-by #{}
+                                                    :terminate-fallback form-hiccup}))
           (update :idx + 7)))))
 
 (defn form-blockquote [state]
-  (let [ctx (-> state :path peek)]
-    (assoc state :path (-> (:path state)
-                           pop
-                           (transf/add-element (elements/->BlockQuote (:link-type ctx)
-                                                                      (transf/conj-text-el (:context/elements ctx)
-                                                                                           (:string state)
-                                                                                           ctx
-                                                                                           (:idx state)))
-                                               state
-                                               (:context/start-idx ctx)
-                                               (:idx state))))))
+  (let [ctx (-> state :roam-parser.state/path peek)]
+    (assoc state :roam-parser.state/path (-> (:roam-parser.state/path state)
+                                             pop
+                                             (transf/add-element (elements/->BlockQuote (:link-type ctx)
+                                                                                        (transf/conj-text-el (:context/elements ctx)
+                                                                                                             (:string state)
+                                                                                                             ctx
+                                                                                                             (:idx state)))
+                                                                 state
+                                                                 (:context/start-idx ctx)
+                                                                 (:idx state))))))
 
 (defn start-blockquote [state char]
   (when-some [[link-type length] (cond (and  (identical? \> char)
@@ -59,18 +59,18 @@
                                             (lookahead-contains? state "[[>]] "))
                                        [:link-type/tag 7])]
     (fn [state get-fallbacks]
-      (let [parent (-> state :path peek)]
+      (let [parent (-> state :roam-parser.state/path peek)]
         (-> state
-            (update :path conj (-> {:context/id :context.id/block-quote
-                                    :link-type link-type
-                                    :context/open-idx length
-                                    :context/start-idx (:idx state)
-                                    :context/rules (:context/rules parent)
-                                    :context/elements []
-                                    :context/killed-by (killed-by-of :context.id/block-quote)
-                                    :context/allows-ctx? (allowed-ctxs-fn :context.id/block-quote (:context/allows-ctx? parent))
-                                    :terminate-fallback form-blockquote}
-                                   (transf/set-ctx-fallback state (get-fallbacks))))
+            (update :roam-parser.state/path conj (-> {:context/id :context.id/block-quote
+                                                      :link-type link-type
+                                                      :context/open-idx length
+                                                      :context/start-idx (:idx state)
+                                                      :context/rules (:context/rules parent)
+                                                      :context/elements []
+                                                      :context/killed-by (killed-by-of :context.id/block-quote)
+                                                      :context/allows-ctx? (allowed-ctxs-fn :context.id/block-quote (:context/allows-ctx? parent))
+                                                      :terminate-fallback form-blockquote}
+                                                     (transf/set-ctx-fallback state (get-fallbacks))))
             (update :idx + length))))))
 
 (defn start-hr [state _]

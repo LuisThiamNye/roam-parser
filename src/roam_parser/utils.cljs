@@ -18,3 +18,7 @@
   (not (or (nil? s)
            (identical? s "")
            (not  (identical? s (clojure.string/trim s))))))
+
+(defn str->float [^string string]
+  (let [result (js/parseFloat string)]
+    (if (js/isNaN result) nil result)))

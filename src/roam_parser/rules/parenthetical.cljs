@@ -11,7 +11,7 @@
   (fn [state char]
     (when (and (identical? char ")")
                (lookahead-contains? state ")"))
-      (transf/ctx-to-element (:path state)
+      (transf/ctx-to-element (:roam-parser.state/path state)
                              (case id
                                :context.id/parenthetical
                                (fn [ctx]
@@ -29,7 +29,7 @@
 (defn start-parenthetical [state char]
   (when (and (identical? char "(")
              (lookahead-contains? state "("))
-    (let [allows-ctx? (:context/allows-ctx? (-> state :path peek))
+    (let [allows-ctx? (:context/allows-ctx? (-> state :roam-parser.state/path peek))
           id (if (allows-ctx? :context.id/parenthetical)
                :context.id/parenthetical
                :context.id/block-ref)]

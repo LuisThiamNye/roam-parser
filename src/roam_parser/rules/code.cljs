@@ -14,7 +14,7 @@
 (defn terminate-codeblock [state char]
   (when (and (identical? \` char)
              (re-find #"(?m)^``$" (remaining-str state)))
-    (transf/ctx-to-element (:path state)
+    (transf/ctx-to-element (:roam-parser.state/path state)
                            (fn [ctx]
                              (let [content (or (some-> ctx :context/elements peek) "")]
                                (elements/->Codeblock (:codeblock/lang ctx)
@@ -44,10 +44,10 @@
 
 (defn terminate-code [state char]
   (when (and (identical? char \`)
-             (not (identical? (-> state :path peek :context/open-idx) (:idx state))))
+             (not (identical? (-> state :roam-parser.state/path peek :context/open-idx) (:idx state))))
     (let [excess (excess-backticks state)
           excess-count (count excess)]
-      (transf/ctx-to-element (:path state)
+      (transf/ctx-to-element (:roam-parser.state/path state)
                              (fn [ctx]
                                (elements/->Code (-> ctx :context/elements peek
                                                     (cond-> (pos? excess-count)

@@ -13,7 +13,7 @@
   (when (identical? "]" char)
     (when (lookahead-contains? state "]")
       (let [idx     (:idx state)]
-        (transf/ctx-to-element (:path state)
+        (transf/ctx-to-element (:roam-parser.state/path state)
                                (fn [ctx]
                                  (let [page-name (subs (:string state) (:context/open-idx ctx) idx)]
                                    (when (no-blank-ends? page-name)
@@ -39,11 +39,11 @@
 
 (defn insert-tag [state]
   (t/debug "INSERTING tag before the close")
-  (let [ctx (-> state :path peek)
+  (let [ctx (-> state :roam-parser.state/path peek)
         idx (:idx state)
         page-name (subs (:string state) (:context/open-idx ctx) idx)]
     (when-not (identical? "" page-name)
-      (assoc state :path (-> (:path state)
+      (assoc state :roam-parser.state/path (-> (:roam-parser.state/path state)
                              pop
                              (transf/add-element (elements/->Tag page-name
                                                                ;; TODO
