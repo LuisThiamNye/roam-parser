@@ -74,8 +74,10 @@
   (fn [state get-fallbacks]
     (let [new-ctx (-> ctx
                       (assoc  :context/rules
-                              (conj (-> state ::state/path peek :context/rules)
-                                    (:context/terminate ctx)))
+                              (let [rules (-> state ::state/path peek :context/rules)]
+                                (if-some [extra-rules (:context/extra-rules ctx)]
+                                  (into rules extra-rules)
+                                  (conj rules (:context/terminate ctx)))))
                       (cond-> (nil? (:context/allows-ctx? ctx))
                         (assoc :context/allows-ctx?
                                (allowed-ctxs-fn (:context/id ctx) (:context/allows-ctx? parent))))

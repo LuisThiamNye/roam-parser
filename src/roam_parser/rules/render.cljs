@@ -6,12 +6,71 @@
    [roam-parser.utils :as utils]
    [roam-parser.rules.relationships :refer [killed-by-of block-ctxs]]
    [roam-parser.rules.text-bracket :refer [start-text-bracket-fn]]
-   [roam-parser.state :refer [lookahead-contains? get-sub]]
+   [roam-parser.state :as state :refer [lookahead-contains? get-sub]]
    [roam-parser.elements :as elements]
    [roam-parser.transformations :as transf]))
 
+(def form-white-space-re #"[\s,]+")
+
+(defn into-forms [els]
+  (reduce (fn [els-acc el]
+            (if (string? el)
+              (-> (clojure.string/split el form-white-space-re)
+                  (as-> splits (cond-> splits
+                                 (-> splits first (identical? ""))
+                                 rest))
+                  (->> (into els-acc)))
+              (conj els-acc el)))
+          [] els))
+
+(defrecord CurlyList [children]
+  elements/ElementProtocol
+  (stringify [_] (str "{" (elements/stringify-children children) "}")))
+
+(defrecord StringElement [content]
+  elements/ElementProtocol
+  (stringify [_] (str \" content \")))
+
+(defn terminate-string [state char]
+  (when (identical? \" char)
+    (transf/ctx-to-element (::state/path state)
+                           (fn [ctx]
+                             (->StringElement (-> ctx :context/elements peek)))
+                           {:context/id :context.id/string
+                            :killed-by #{}
+                            :next-idx (-> state :idx inc)})))
+
+(defn start-string [state char]
+  (when (identical? \" char)
+    (transf/try-new-ctx {:context/id        :context.id/string
+                         :context/open-idx  (-> state :idx inc)
+                         :context/elements  []
+                         :context/allows-ctx? (constantly false)
+                         :context/killed-by #{}
+                         :context/terminate terminate-string}
+                        state)))
+
+(defn terminate-curly-list [state char]
+  (when (identical? "}" char)
+    (transf/ctx-to-element (::state/path state)
+                           (fn [ctx]
+                             (->CurlyList (into-forms (:context/elements ctx))))
+                           {:context/id :context.id/curly-list
+                            :killed-by #{}
+                            :next-idx (-> state :idx inc)})))
+
 (defn start-curly-list [state char]
-  (when (identical? "{" char)))
+  (when (identical? "{" char)
+    (let [parent (-> state ::state/path peek)]
+      (transf/try-new-ctx {:context/id        :context.id/curly-list
+                           :context/open-idx  (-> state :idx inc)
+                           :context/elements  []
+                           :context/text-rules [(start-text-bracket-fn "{" "}")]
+                           :context/allows-ctx? #(or (:context/allows-ctx? parent)
+                                                      (#{:context.id/string} %))
+                           :context/killed-by #{}
+                           :context/terminate terminate-curly-list}
+                          state))))
 
 (defn start-pipe [state char]
   (when (identical? \| char)
@@ -38,39 +97,96 @@
 (defn delta-id? [id]
   (= 8710 (.charCodeAt id 0)))
 
+
+(defn trim-elements-start [els]
+  (if (zero? (count els))
+els
+    (let [first-el (nth els 0)
+                          trimmed-str (cond-> first-el (string? first-el)
+                                              (clojure.string/replace #"^\s*" ""))]
+                      (if (identical? "" trimmed-str)
+                        (subvec els 1)
+                        (assoc els 0 trimmed-str)))))
+
+(defn trim-elements-end [els]
+  (if (zero? (count els))
+    els
+    (let [last-el (peek els)
+         trimmed-str (cond-> last-el (string? last-el)
+                             (clojure.string/replace #"\s*$" ""))]
+     (if (identical? "" trimmed-str)
+       (pop els)
+       (utils/assoc-last els trimmed-str)))))
+
 (defn clean-groups [groups]
   (-> groups
       ;; trim off empty group at the end
       (as-> gs (cond-> gs (-> gs peek count zero?) pop))
                                ;; remove leading whitespace
-      (update-in [0 0] (fn [el]
-                         (cond-> el (string? el)
-                                 (clojure.string/replace #"^\s*" ""))))
+      (update 0 trim-elements-start)
                                ;; remove trailing whitespace
-      (utils/update-last (fn [last-g]
-                           (utils/update-last last-g
-                                              (fn [last-el]
-                                                (cond-> last-el (string? last-el)
-                                                        (clojure.string/replace #"\s*$" ""))))))))
+      (utils/update-last trim-elements-end)))
 
 (defn split-el-into-groups [groups el max-splits]
   (if (string? el)
-                                           (let [[group-tail & new-group-strs] (clojure.string/split el #"\s*\|\s*" max-splits)]
-                                             (if (nil? group-tail)
-                                            ;; entire string is the delimiter
-                                               (conj groups [])
-                                               (-> groups
-                                                   (cond-> (not (clojure.string/blank? group-tail))
-                                                     (utils/update-last #(conj % group-tail)))
-                                                   (as-> g (reduce (fn [gs s]
-                                                                     (if (clojure.string/blank? s)
-                                                                       gs
-                                                                       (conj gs (vector s))))
-                                                                   g
-                                                                   new-group-strs))
-                                                   (cond-> (re-find #"\|\s*$" el)
-                                                     (conj [])))))
-                                           (utils/update-last groups #(conj % el))))
+    (let [[group-tail & new-group-strs] (clojure.string/split el #"\s*\|\s*" max-splits)]
+      (if (nil? group-tail)
+        ;; entire string is the delimiter
+        (conj groups [])
+        (-> groups
+            (cond-> (not (clojure.string/blank? group-tail))
+              (utils/update-last #(conj % group-tail)))
+            (as-> g (reduce (fn [gs s]
+                              (if (clojure.string/blank? s)
+                                gs
+                                (conj gs (vector s))))
+                            g
+                            new-group-strs))
+            (cond-> (re-find #"\|\s*$" el)
+              (conj [])))))
+    (utils/update-last groups #(conj % el))))
+
+(declare parse-query)
+
+(defn query-condition? [x] (map? x))
+
+(defn parse-query-condition [els operator]
+  {:query/operator operator
+   :operands (transduce (comp
+                         (map (fn [x]
+                                (if (instance? CurlyList x)
+                                  (parse-query x)
+                                  x)))
+                         (filter #(or (instance? elements/PageLink %)
+                                      (query-condition? %)
+                                      (instance? elements/BlockRef %))))
+                        conj (rest els))})
+
+(defn parse-query [q-list]
+  (let [els (:children q-list)]
+    (case (first els)
+      "and:" (parse-query-condition els :query/and)
+      "or:" (parse-query-condition els :query/or)
+      "not:" (parse-query-condition els :query/not)
+      "between:" (parse-query-condition els :query/between)
+      {:error (str "Error processing " (elements/stringify q-list)
+                   "\nExpected one of:"
+                   "\n{and:"
+                   "\n{or:"
+                   "\n{not:"
+                   "\n{between:")})))
+
+(defn component-query [ctx]
+  (let [[first-el second-el :as els] (-> ctx :context/elements
+                                                 trim-elements-start
+                                                 trim-elements-end)]
+    (cond
+      (> (count els) 2) nil
+      (and (string? first-el) (instance? CurlyList second-el))
+      {:title (clojure.string/trim first-el)
+       :query (parse-query second-el)}
+      (and (instance? CurlyList first-el) (nil? second-el))
+      {:query (parse-query first-el)})))
 
 (defn render-comp [ctx]
   (let [render-id (:render/id ctx)]
@@ -132,7 +248,7 @@
                                        els)
                                clean-groups)]
                 {:groups groups})
-      "query" nil
+      "query" (component-query ctx)
       (if (delta-id? render-id)
         (let [els (:context/elements ctx)]
           (when-not (elements-empty? els)
@@ -171,9 +287,9 @@
           "attr-table" [#{:context.id/page-link} true]
           "=" [block-ctxs false ]
           "or" [block-ctxs false ]
-          "query" [#{:context.id/curly-list} true [start-curly-list]]
+          "query" [#{:context.id/curly-list} false [start-curly-list]]
           (if (delta-id? id)
-            [#{:context.id/curly-list} false [start-curly-list]]
+            [#{:context.id/curly-list} false [start-string start-curly-list]]
             [#{:context.id/block-ref :context.id/page-link}
              false]))]
     (-> ctx

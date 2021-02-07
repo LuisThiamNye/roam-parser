@@ -11,8 +11,11 @@
 
 (defn re-to-str [re] (.slice (str re) 1 -1))
 
+(defn assoc-last [coll item]
+  (assoc coll (dec (count coll)) item))
+
 (defn update-last [coll f]
-  (update coll (dec (count coll)) f))
+  (assoc-last coll (f (peek coll))))
 
 (defn no-blank-ends? [s]
   (not (or (nil? s)

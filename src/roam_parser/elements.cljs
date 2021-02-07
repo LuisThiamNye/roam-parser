@@ -9,7 +9,7 @@
 (defn text? [el] (string? el))
 
 
-(defn- stringify-children [els]
+(defn stringify-children [els]
   (reduce #(str % (stringify %2)) "" els))
 
 
