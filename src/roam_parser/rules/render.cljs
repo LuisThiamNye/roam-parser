@@ -118,6 +118,11 @@ els
        (pop els)
        (utils/assoc-last els trimmed-str)))))
 
+(defn trim-elements [els]
+  (-> els
+      trim-elements-start
+      trim-elements-end))
+
 (defn clean-groups [groups]
   (-> groups
       ;; trim off empty group at the end
@@ -177,9 +182,7 @@ els
                    "\n{between:")})))
 
 (defn component-query [ctx]
-  (let [[first-el second-el :as els] (-> ctx :context/elements
-                                                 trim-elements-start
-                                                 trim-elements-end)]
+  (let [[first-el second-el :as els] (trim-elements (:context/elements ctx))]
     (cond
       (> (count els) 2) nil
       (and (string? first-el) (instance? CurlyList second-el))
@@ -187,6 +190,14 @@ els
        :query (parse-query second-el)}
       (and (instance? CurlyList first-el) (nil? second-el))
       {:query (parse-query first-el)})))
+
+(defn single-ref-comp [ctx arg-types]
+  (let [els (-> ctx :context/elements trim-elements)
+        el  (peek els)]
+    (when (= 1 (count els))
+      (if (some #(instance? % el) arg-types)
+        {:element el}
+        (t/warn "unrecognised element in" (:render/id ctx) "of type" (type el))))))
 
 (defn render-comp [ctx]
   (let [render-id (:render/id ctx)]
@@ -214,21 +225,9 @@ els
                                                           (str)))))
                                 str els)))}))
       ("embed"
-       "mentions")
-      (let [els (-> ctx :context/elements)
-            el  (peek els)]
-        (when (= 1 (count els))
-          (condp instance? el
-            elements/PageLink {:node/title (:page-name el)}
-            elements/BlockRef {:block/uid (:block-uid el)}
-            (t/warn "unrecognised element in" (:render/id ctx) "of type" (type el)))))
-      "attr-table"
-      (let [els (-> ctx :context/elements)
-            el  (peek els)]
-        (when (= 1 (count els))
-          (condp instance? el
-            elements/PageLink {:node/title (:page-name el)}
-            (t/warn "unrecognised element in" (:render/id ctx) "of type" (type el)))))
+       "mentions") (single-ref-comp ctx [elements/PageLink elements/BlockRef])
+      "attr-table" (single-ref-comp ctx [elements/PageLink])
+      "roam/render" (single-ref-comp ctx [elements/BlockRef])
       "="     (let [els (:context/elements ctx)
                     [visible hidden] (-> (loop [groups [[]]
                                                 els-left els]
@@ -285,6 +284,7 @@ els
           ("embed"
            "mentions") [#{:context.id/block-ref :context.id/page-link} true]
           "attr-table" [#{:context.id/page-link} true]
+          "roam/render" [#{:context.id/block-ref} true]
           "=" [block-ctxs false ]
           "or" [block-ctxs false ]
           "query" [#{:context.id/curly-list} false [start-curly-list]]
