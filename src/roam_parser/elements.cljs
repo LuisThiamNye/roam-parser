@@ -81,7 +81,7 @@
   (stringify [_]
     (str "#[[" page-name "]]")))
 
-(defrecord Tag [^string page-name ns-strings]
+(defrecord Tag [^string page-name]
   ElementProtocol
   (stringify [_] (str \# page-name)))
 

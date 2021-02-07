@@ -23,7 +23,7 @@
                                    (when (no-blank-ends? uid)
                                      (elements/->BlockRef uid)))))
                              {:context/id id
-                              :killed-by (killed-by-of id) ;; TODO use polymorphism? implement killed-by?
+                              :killed-by (killed-by-of id)
                               :next-idx   (+ 2 (:idx state))}))))
 
 (defn start-parenthetical [state char]

@@ -21,7 +21,7 @@
                                       page-name
                                       (:context/elements ctx)))))
                                {:context/id :context.id/page-link
-                                :killed-by (killed-by-of :context.id/page-link) ;; TODO use polymorphism? implement killed-by?
+                                :killed-by (killed-by-of :context.id/page-link)
                                 :next-idx   (+ 2 idx)})))))
 
 (defn start-page-link [state char]
@@ -45,9 +45,7 @@
     (when-not (identical? "" page-name)
       (assoc state :roam-parser.state/path (-> (:roam-parser.state/path state)
                              pop
-                             (transf/add-element (elements/->Tag page-name
-                                                               ;; TODO
-                                                                 nil)
+                             (transf/add-element (elements/->Tag page-name)
                                                  state
                                                  (:context/start-idx ctx)
                                                  idx))))))

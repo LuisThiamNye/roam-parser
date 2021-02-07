@@ -37,9 +37,9 @@
   (contains? (:context/killed-by ctx) (:context/id killer-ctx)))
 
 ;; TODO use regex escape var in rules/
-(def str-replace-re (js/RegExp. (str "\\\\(?<escape>" (utils/re-to-str #"[\\{}\[\]\(\)`\*_\^:#!\n>]|\${2}") ")")
-                                "g"))
-(defn escape-str [^string string] (.replace string str-replace-re "$<escape>"))
+;; (def str-replace-re (js/RegExp. (str "\\\\(?<escape>" (utils/re-to-str #"[\\{}\[\]\(\)`\*_\^:#!\n>]|\${2}") ")")
+;;                                 "g"))
+;; (defn escape-str [^string string] (.replace string str-replace-re "$<escape>"))
 
 (defn conj-text-el [els string ctx end-idx]
   (if (:context/ignore-text? ctx)

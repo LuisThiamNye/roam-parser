@@ -4,6 +4,7 @@
    [taoensso.timbre :as t]
    [roam-parser.elements :as elements]
    [roam-parser.utils :as utils]
+   [roam-parser.rules.url :refer [start-url]]
    [roam-parser.rules.code :refer [start-code start-codeblock]]
    [roam-parser.rules.parenthetical :refer [start-parenthetical]]
    [roam-parser.rules.attribute :refer [start-attribute]]
@@ -11,6 +12,7 @@
    [roam-parser.rules.block-beginning :refer [block-beginning-rules]]
    [roam-parser.rules.alias :refer [start-alias-square start-image-square]]
    [roam-parser.rules.render :refer [start-render]]
+   [roam-parser.rules.text-bracket :refer [start-text-bracket-fn]]
    [roam-parser.rules.formatting :refer [start-formatting start-latex]]))
 
 
@@ -35,7 +37,8 @@
             (recur (dec i)))))))
 
 ;; processed from end to beginning. Order of descending priority
-(def rules [text-rules
+(def rules [start-url
+            text-rules
             skip-escape-char
             start-latex
             start-attribute
