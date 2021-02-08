@@ -1,4 +1,4 @@
-# Special Markdown Parser for Roam Research
+# Markdown Parser for Roam Research
 
 ## Rationale
 
