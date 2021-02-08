@@ -32,7 +32,8 @@
     :context.id/codeblock       #{}
     :context.id/code            #{:context.id/codeblock}
     :context.id/block-quote     #{}
-    :context.id/url #{}
+    :context.id/url #{:context.id/render-id
+                          :context.id/page-link}
     :context.id/latex           #{}))
 
 (def block-ctxs #{:context.id/code

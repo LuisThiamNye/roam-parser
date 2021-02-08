@@ -6,7 +6,7 @@ Roam Research is a revolution in information technology. Although, its current p
 
 Unlike most markdown, Roam's language can include notation of complex, recursive data structures, like code — yet it must tolerate the vague and context-dependent nature of standard markdown.
 
-Therefore, this parser aims to provide desired parsing results and allow the user to express a variety of meanings that are currently not possible. For example, you currently cannot make an alias bold (`**[x](y)**`), or have an image inside of an alias (`[![alt-text](image-url)](alias-url)`).
+Therefore, this parser aims to provide desired parsing results and allow the user to express a variety of meanings that are currently not possible. For example, you currently cannot make an alias bold (`**[x](y)**`), have an image inside of an alias (`[![alt-text](image-url)](alias-url)`), or do this: `[[clickable text](url)]` (where the outer brackets are non-clickable).
 
 This project is based on a challenge set out in [this tweet](https://twitter.com/Conaw/status/1334626650785341441) by Conor.
 
@@ -55,8 +55,6 @@ Elements that have been implemented so far:
 - inline-url - www.example.com, https://example.com
 - attribute::
 
-The parser is capable of balancing brackets, not just for `[[[[nested]] pages]]` but also for things like `[[CLICK ME]](url)` (parsed as alias with `[CLICK ME]` visible) or `[[some [thing]]]` (parses as a page link to `some [thing]`).
-
 Ability to parse {{ }} components:
 
 - Simple components like {{count}}
@@ -71,7 +69,13 @@ Ability to parse {{ }} components:
 - `{{or: #anything | ((goes)) | here}}`
 - pdf, youtube, video, iframe and calc all take a text argument. The parser provides a function that allows block refs to be substituted with their text contents to end up with a complete string.
 
-I envision that in the future, S-expressions like  {:rule (if test? (inc :var) (dec :var)) } can be used in {{ }} components to provide more configuration. The parser can interpret a list of forms separated by whitespace (including commas).
+Further notes:
+
+- The parser is capable of matching brackets correctly, not just for `[[[[nested]] pages]]` but also for things like `[[CLICK ME]](url)` (parsed as alias with `[CLICK ME]` visible) or `[[some [thing]]]` (parses as a page link to `some [thing]`). It addresses [this issue](https://github.com/Roam-Research/issues/issues/186) and [that issue](https://github.com/Roam-Research/issues/issues/17).
+
+- Whilst guiding this project in Roam, I have been inconvenienced by the fact that I cannot express a single backtick (`) with monospace/code formatting, as escape characters are not a thing. So, this parser turns any occurence of ``` into just that (as long as it does not pair up to form a codeblock).
+
+- I envision that in the future, S-expressions like  {:rule (if test? (inc :var) (dec :var)) } can be used in {{ }} components to provide more configuration. The parser can interpret a list of forms separated by whitespace (including commas).
 
 ## Performance
 
@@ -136,10 +140,10 @@ While this method does seem inefficient, my countless hours of 'floor time' (I d
 
 Here are some examples of things that have not been done as of yet:
 
-- Escape characters
 - Turn up the performance -- eg identify tokens of interest
 - Refactor individual components out of render.cljs -- clean that file up.
 - Further refactoring to capture commonalities between state transform rules.
+- Escape characters
 
 Considering this task from the original brief:
 
