@@ -5,19 +5,6 @@
                                   [roam-parser.transformations :as transf]
                                   [roam-parser.state :as state :refer [initial-state]]))
 
-(defn probe [x] (.log js/console x) x)
-
-
-
-(defn get-match [^string string re start end]
-  (re-find re (subs string start end)))
-
-
-;; ---------------============================-----
-
-
-
-
 (defn find-elements [string]
   (let [str-length (count string)
         runs       (volatile! 0)]
