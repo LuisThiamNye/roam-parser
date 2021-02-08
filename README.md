@@ -86,7 +86,9 @@ Running `window.help(0,1000)` 5 times gives
 "Elapsed time: 219.290000 msecs"
 ```
 
-Notes about performance:
+Notes on performance:
+- These numbers vary depending on the sample of lines (i.e. the specified line numbers). Some lines are more intense than others, and 1000 is a small sample.
+
 - I have not focused on optimising performance yet, so I expect there will be some good gains to be had.
   - For example, the parser currently iterates through each individual character to check for actions to be done. Given that most characters are plain text, runs of non-special characters could be skipped over using regex to determine when to do this.
 
@@ -110,11 +112,11 @@ Here's a high-level overview of the parsing process:
 
 - It starts with a state, and each character in the string is processed as a command that transforms the state
 
-- When processing a character, we go through a stack of state transformers that will only take action when the conditions are right, eg when finding a `[[` to mark a page opening.
+- When processing a character, we go through a stack of state transformers that will only take action when the conditions are right, eg when finding a `[[** to mark a page opening.
 
 - If not transformers take action, we do nothing and move onto the next character.
 
-- Transformers can do anything they want with the state, as long as they conform to certain rules -- this makes the parser very flexible as commonalities can be refactored into shared helper functions.
+- Transformers can do ****anything** they want with the state, as long as they conform to certain rules -- this makes the parser very flexible as commonalities can be refactored into shared helper functions.
 
 - "Contexts" can be created to modify the events that take place when parsing subsequent characters
   - They define contexts that are allowed as children (eg bold can contain italic -- `**__x__**` -- but code should not contain a clickable page -- `[[page surrounded by backticks]]`)
@@ -144,3 +146,9 @@ Considering this task from the original brief:
 > Provide an abstraction for Replacing each item in the tree with something else (like an html component, or a new string value)
 
 I have not directly addressed this requirement since I do not have the full details of what is needed of the API and how it will be used. That being said, the parsed data is provided as friendly Clojure maps and vectors, so if you knew what you wanted to change, you could leverage the built-in Clojure facilities like `update-in`. If necessary, more specialised functions could easily be built on these. Then, if you wanted the updated string, you can use the associated `stringify` function for the modified element. Though, since stringifying is super fast compared to parsing, you might as well stringify the entire block string, which ensures everything is stringified properly.
+
+## History
+
+Originally, I had designed a parser that extracted all tokens from the string using regex. Then, it would pass over each type of token separately and match pairs of delimiters. There would be a recursive process of repeating the parse for the children of each pair. While I had this design down to some good performance numbers (30–160ms per 1000 lines), I felt it got quite complex and had less flexibility.
+
+See my [Notion publication for V1](https://www.notion.so/crypticbutter/Roam-Parser-V1-acd4a5a5aad34a9f849e5c2477f505a3).
