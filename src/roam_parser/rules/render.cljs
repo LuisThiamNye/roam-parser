@@ -199,6 +199,10 @@ els
         {:element el}
         (t/warn "unrecognised element in" (:render/id ctx) "of type" (type el))))))
 
+(def default-delta-comp #:delta{:delay 1
+                               :operation (constantly 0)
+                               :modifier 0} )
+
 (defn render-comp [ctx]
   (let [render-id (:render/id ctx)]
     (case render-id
@@ -249,12 +253,17 @@ els
                 {:groups groups})
       "query" (component-query ctx)
       (if (delta-id? render-id)
-        (let [els (:context/elements ctx)]
-          (when-not (elements-empty? els)
-            (let [first-el (first els)]
+        (let [els (:context/elements ctx)
+              first-el (first els)]
+          (if (elements-empty? els)
+              default-delta-comp
               (when (string? first-el)
-                (parse-delta-shorthand first-el)))))
+                (parse-delta-shorthand first-el))))
         :simple))))
+
+(defn empty-comp [id]
+  (when (delta-id? id)
+    default-delta-comp))
 
 (defn terminate-render [state char]
   (when (and (identical? "}" char)
@@ -332,7 +341,7 @@ els
         (when-some [[linked? render-id] (render-id-data state)]
           (transf/ctx-to-element (:roam-parser.state/path state)
                                  (fn [_]
-                                   (elements/->Render render-id linked? nil nil))
+                                   (elements/->Render render-id linked? nil (empty-comp render-id)))
                                  {:context/id :context.id/render-id
                                   :killed-by  (killed-by-of :context.id/render-id)
                                   :next-idx   (-> state :idx (+ 2))}))))
