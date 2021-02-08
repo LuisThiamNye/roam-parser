@@ -21,11 +21,22 @@
     \~ :context.id/strikethrough
     nil))
 
+(defn no-excess-before? [state char]
+  (re-find (re-pattern (str "(?<!\\" char ")$"))
+           (preceding-str state)))
+
+(defn no-excess-after? [state char]
+  (re-find (re-pattern (str "^\\" char "(?!\\" char ")"))
+           (remaining-str state)))
+
+(defn only-two? [state char]
+  (and (no-excess-before? state char)
+       (no-excess-after? state char)))
+
 (defn only-two-closers? [state char]
-  (and (re-find (re-pattern (str "^\\" char "(?!\\" char ")"))
-            (remaining-str state))
-   (re-find (re-pattern (str "[^\\s\\" char  "]$"))
-            (preceding-str state))))
+  (and (no-excess-after? state char)
+       (re-find (re-pattern (str "[^\\s\\" char  "]$"))
+                (preceding-str state))))
 
 (defn terminate-formatting-fn [ctx-id match-char]
   (fn [state char]
@@ -42,8 +53,7 @@
 (defn only-two-openers? [state char]
   (and (re-find (re-pattern  (str "^\\" char "[^\\s\\" char "]"))
                 (remaining-str state))
-       (re-find (re-pattern (str "(?<!\\" char ")$"))
-                (preceding-str state))))
+       (no-excess-before? state char)))
 
 (defn start-formatting [state char]
   (when-let [ctx-id (char->ctx-id char)]
@@ -57,7 +67,7 @@
 
 (defn terminate-latex [state char]
   (when (and (identical? \$ char)
-             (only-two-closers? state char))
+             (only-two? state char))
     (transf/ctx-to-element (:roam-parser.state/path state)
                            (fn [ctx]
                              (let [content (-> ctx :context/elements peek)]
@@ -69,7 +79,7 @@
 
 (defn start-latex [state char]
   (when (and  (identical? char \$)
-              (only-two-openers? state char))
+              (only-two? state char))
     (transf/try-new-ctx {:context/id :context.id/latex
                          :context/open-idx (-> state :idx (+ 2))
                          :context/killed-by (killed-by-of :context.id/latex)

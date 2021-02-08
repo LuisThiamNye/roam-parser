@@ -13,48 +13,46 @@
 
 (def lines (cstr/split sample/text #"\n[ \n]*"))
 
-(set! (.-block js/window) parser/parse-block)
-
 
 (defn build-real-results [start end]
   (reduce #(conj % (parser/parse-block %2)) [] (subvec lines start end)))
 
+(defn evade-logs [f]
+  (timbre/set-level! :info)
+  (f)
+  (timbre/set-level! :debug))
+
 (defn real-test-builder
   ([start end]
-   (timbre/set-level! :info)
-   (time (doseq [line (subvec lines start end)]
-           (parser/parse-block line)))
-   (timbre/set-level! :debug)
+   (evade-logs #(time (doseq [line (subvec lines start end)]
+                        (parser/parse-block line))))
    nil)
   ([start end debug]
-   (timbre/set-level! :info)
-   (if debug
-     (time (doseq [line (subvec lines start end)]
-             (parser/parse-block (utils/probe line))))
-     (real-test-builder start end))
-   (timbre/set-level! :debug)
+   (evade-logs #(if debug
+                  (time (doseq [line (subvec lines start end)]
+                          (parser/parse-block (utils/probe line))))
+                  (real-test-builder start end)))
    nil))
-
-(set! (.-help js/window) real-test-builder)
-
 
 (defn restring [text]
   (el/stringify (parser/parse-block text)))
 
 (defn real-test-str
   ([start end]
-   (let [bs (build-real-results start end)]
-     (time (doseq [b bs]
-             (el/stringify b))))
+   (evade-logs #(let [bs (build-real-results start end)]
+                  (time (doseq [b bs]
+                          (el/stringify b)))))
    nil)
   ([start end debug]
-   (if debug
-     (let [bs (build-real-results start end)]
-       (time (doseq [b bs]
-               (el/stringify (utils/probe b)))))
-     (real-test-str start end))
+   (evade-logs #(if debug
+      (let [bs (build-real-results start end)]
+        (time (doseq [b bs]
+                (el/stringify (utils/probe b)))))
+      (real-test-str start end)))
    nil))
 
+(set! (.-block js/window) parser/parse-block)
+(set! (.-help js/window) real-test-builder)
 (set! (.-str js/window) restring)
 (set! (.-helpstr js/window) real-test-str)
 
