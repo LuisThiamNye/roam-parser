@@ -4,7 +4,7 @@
 
 Roam Research is a revolution in information technology. Although, its current parser for Roam is not great, and it can sometimes be quirky. Thus, I have set out to create an improved parser, based on ClojureScript, that addresses the problems of the current implementation in Roam.
 
-Unlike most markdown, Roam's language can include notation of complex, recursive data structures, like code — yet it must tolerate the vague and context-depenent nature of standard markdown.
+Unlike most markdown, Roam's language can include notation of complex, recursive data structures, like code — yet it must tolerate the vague and context-dependent nature of standard markdown.
 
 Therefore, this parser aims to provide desired parsing results and allow the user to express a variety of meanings that are currently not possible. For example, you currently cannot make an alias bold (`**[x](y)**`), or have an image inside of an alias (`[![alt-text](image-url)](alias-url)`).
 
@@ -124,11 +124,11 @@ This parser is very much a believer in being decisive, making assumptions, and c
 
 <blockquote class="twitter-tweet"><p lang="en" dir="ltr">Anything worth doing is worth doing wrong.<br><br>Only way to start.</p>&mdash; Conor White-Sullivan 𐃏🇺🇸 (@Conaw) <a href="https://twitter.com/Conaw/status/1318712092132745216?ref_src=twsrc%5Etfw">October 21, 2020</a></blockquote>
 
-In concrete terms, if the parser reaches a decision point in the string that could mean multiple things (eg "["), it choses just one state transformation and moves on. This quality makes it easy to think about the parsing process when writing extensions.
+In concrete terms, if the parser reaches a decision point in the string that could mean multiple things (eg "["), it chooses just one state transformation and moves on. This quality makes it easy to think about the parsing process when writing extensions.
 
 Later down the line, it could be proven that a certain state transformation was the wrong life decision (eg no matching "]" was found or there was a conflict with regard to the 'killed by' rules). In this case, we can simply look to the relevant 'context' which defines instructions for backtracking to the decision point and resuming with an alternative option -- then fingers crossed to see if that works out. All praise the immutable data in Clojure!
 
-While this method does seem inefficient, my countless hours of 'floor time' (I don't have a hammock) has lead me to believe that this work is unavoidable if you want a robust parser that respects your rules whilst offering convenient modularity.
+While this method does seem inefficient, my countless hours of 'floor time' (I don't have a hammock) have lead me to believe that this work is unavoidable if you want a robust parser that respects your rules whilst offering convenient modularity.
 
 ## There are still things on the to-do list
 
