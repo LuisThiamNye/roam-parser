@@ -116,11 +116,11 @@ Here's a high-level overview of the parsing process:
 
 - It starts with a state, and each character in the string is processed as a command that transforms the state
 
-- When processing a character, we go through a stack of state transformers that will only take action when the conditions are right, eg when finding a `[[** to mark a page opening.
+- When processing a character, we go through a stack of state transformers that will only take action when the conditions are right, eg when finding a `[[` to mark a page opening.
 
 - If not transformers take action, we do nothing and move onto the next character.
 
-- Transformers can do ****anything** they want with the state, as long as they conform to certain rules -- this makes the parser very flexible as commonalities can be refactored into shared helper functions.
+- Transformers can do **anything** they want with the state, as long as they conform to certain rules -- this makes the parser very flexible as commonalities can be refactored into shared helper functions.
 
 - "Contexts" can be created to modify the events that take place when parsing subsequent characters
   - They define contexts that are allowed as children (eg bold can contain italic -- `**__x__**` -- but code should not contain a clickable page -- `[[page surrounded by backticks]]`)
